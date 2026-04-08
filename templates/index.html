@@ -190,6 +190,47 @@
     .sidebar.collapsed .sidebar-group { display: none; }
     .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
 
+    /* ── User selector ────────────────────────────────────────── */
+    .user-selector { position: relative; }
+    .user-selector-btn {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; padding: 8px 10px;
+      border-radius: var(--r2); border: none;
+      background: none; color: var(--sb-text);
+      cursor: pointer; font-size: 13px; font-weight: 500;
+      font-family: var(--font);
+      transition: background .12s, color .12s;
+      white-space: nowrap; overflow: hidden;
+    }
+    .user-selector-btn:hover { background: var(--sb-hover); color: var(--sb-text-hi); }
+    .sidebar.collapsed .user-selector-label { display: none; }
+    .user-menu {
+      position: absolute; bottom: calc(100% + 6px); left: 8px; right: 8px;
+      background: #1F2D3D; border: 1px solid var(--sb-border);
+      border-radius: var(--r2); overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0,0,0,.4);
+      z-index: 200;
+    }
+    .user-menu-title {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .10em; color: var(--sb-group);
+      padding: 8px 10px 4px;
+    }
+    .user-menu-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; cursor: pointer;
+      font-size: 13px; color: var(--sb-text);
+      transition: background .1s;
+    }
+    .user-menu-item:hover { background: var(--sb-hover); color: var(--sb-text-hi); }
+    .user-menu-item.active { background: var(--sb-active); color: #fff; }
+    .user-menu-item .user-badge {
+      font-family: var(--mono); font-size: 10px;
+      background: rgba(255,255,255,.08); border-radius: 3px;
+      padding: 1px 5px; margin-left: auto; flex-shrink: 0;
+    }
+    .user-menu-item.no-access { opacity: .45; cursor: not-allowed; }
+
     /* ── Sidebar footer / theme toggle ───────────────────────── */
     .sidebar-footer {
       padding: var(--sp1);
@@ -748,6 +789,21 @@
         <span class="nav-label">Backups</span>
       </a>
     </nav>
+  </div>
+
+  <!-- Sidebar: user selector -->
+  <div class="sidebar-footer" style="border-bottom:1px solid var(--sb-border); padding-bottom:8px; margin-bottom:0;">
+    <div class="user-selector" id="user-selector">
+      <button class="user-selector-btn" id="user-selector-btn" onclick="toggleUserMenu()" title="Selecionar usuário">
+        <i data-lucide="user" style="width:14px;height:14px;flex-shrink:0;"></i>
+        <span class="nav-label user-selector-label" id="user-selector-label">carregando…</span>
+        <i data-lucide="chevrons-up-down" style="width:12px;height:12px;flex-shrink:0;margin-left:auto;opacity:.6;"></i>
+      </button>
+      <div class="user-menu" id="user-menu" style="display:none;">
+        <div class="user-menu-title">Selecionar config</div>
+        <div id="user-menu-list"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Sidebar footer: theme toggle -->
@@ -2327,7 +2383,74 @@ function _applyThemeIcon(theme) {
 
   // Pre-load backup list for Config Diff selects
   loadDiffBackups();
+
+  // Init user selector
+  loadUserSelector();
 })();
+
+// ── User selector ──────────────────────────────────────────────
+let _userMenuOpen = false;
+
+async function loadUserSelector() {
+  try {
+    const res = await fetch('/api/users');
+    const data = await res.json();
+    renderUserSelector(data.users, data.active);
+  } catch(e) {
+    document.getElementById('user-selector-label').textContent = 'erro';
+  }
+}
+
+function renderUserSelector(users, activePath) {
+  const label = document.getElementById('user-selector-label');
+  const list  = document.getElementById('user-menu-list');
+
+  const activeUser = users.find(u => u.path === activePath);
+  label.textContent = activeUser ? activeUser.user : 'selecionar…';
+
+  list.innerHTML = users.map(u => `
+    <div class="user-menu-item ${u.path === activePath ? 'active' : ''} ${!u.readable ? 'no-access' : ''}"
+         onclick="${u.readable ? `selectUser('${u.path.replace(/'/g,"\\'")}')` : ''}"
+         title="${u.path}">
+      <i data-lucide="user" style="width:13px;height:13px;flex-shrink:0;"></i>
+      <span>${u.user}</span>
+      ${!u.writable ? '<span class="user-badge">ro</span>' : ''}
+      ${!u.readable ? '<span class="user-badge">sem acesso</span>' : ''}
+    </div>
+  `).join('');
+
+  lucide.createIcons({ nodes: [list] });
+}
+
+function toggleUserMenu() {
+  _userMenuOpen = !_userMenuOpen;
+  document.getElementById('user-menu').style.display = _userMenuOpen ? 'block' : 'none';
+}
+
+async function selectUser(path) {
+  const res = await fetch('/api/select-user', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ path })
+  });
+  const data = await res.json();
+  if (data.success) {
+    toggleUserMenu();
+    await loadUserSelector();
+    // Reload current section data
+    window.location.reload();
+  } else {
+    showToast('❌ ' + data.error, true);
+  }
+}
+
+// Close user menu on outside click
+document.addEventListener('click', e => {
+  if (_userMenuOpen && !document.getElementById('user-selector').contains(e.target)) {
+    _userMenuOpen = false;
+    document.getElementById('user-menu').style.display = 'none';
+  }
+});
 </script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 </body>

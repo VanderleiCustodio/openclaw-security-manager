@@ -80,25 +80,76 @@ BACKUP_DIR = OPENCLAW_DIR / "backups"
 
 
 # ---------------------------------------------------------------------------
+# Multi-user config discovery
+# ---------------------------------------------------------------------------
+
+def discover_user_configs() -> list:
+    """Return list of dicts for every user that has an openclaw.json on disk."""
+    found = []
+    if os.name != "nt":  # Linux / macOS
+        home_base = Path("/home")
+        candidates = []
+        if home_base.exists():
+            for user_home in sorted(home_base.iterdir()):
+                if user_home.is_dir():
+                    candidates.append((user_home.name, user_home / ".openclaw" / "openclaw.json"))
+        candidates.append(("root", Path("/root/.openclaw/openclaw.json")))
+        for username, cfg in candidates:
+            try:
+                if cfg.exists():
+                    found.append({
+                        "user": username,
+                        "path": str(cfg),
+                        "readable": os.access(cfg, os.R_OK),
+                        "writable": os.access(cfg, os.W_OK),
+                    })
+            except PermissionError:
+                pass
+    # Windows fallback (development) — always include the detected default
+    default_str = str(CONFIG_PATH)
+    if not any(u["path"] == default_str for u in found):
+        found.insert(0, {
+            "user": os.environ.get("USERNAME", "default"),
+            "path": default_str,
+            "readable": True,
+            "writable": True,
+        })
+    return found
+
+
+def get_active_paths():
+    """Return (config_path, openclaw_dir, backup_dir) for the selected user."""
+    from flask import has_request_context, session as _session
+    if has_request_context():
+        active = _session.get("active_config_path")
+        if active:
+            p = Path(active)
+            return p, p.parent, p.parent / "backups"
+    return CONFIG_PATH, OPENCLAW_DIR, BACKUP_DIR
+
+
+# ---------------------------------------------------------------------------
 # Safe JSON load / save with backup
 # ---------------------------------------------------------------------------
 
 def load_config() -> dict:
-    if CONFIG_PATH.exists():
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    config_path, _, _ = get_active_paths()
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {}
 
 
 def backup_config():
-    if not CONFIG_PATH.exists():
+    config_path, openclaw_dir, backup_dir = get_active_paths()
+    if not config_path.exists():
         return None
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = BACKUP_DIR / f"openclaw_{ts}.json"
-    shutil.copy2(CONFIG_PATH, dest)
+    dest = backup_dir / f"openclaw_{ts}.json"
+    shutil.copy2(config_path, dest)
     # Keep only last 10 backups
-    backups = sorted(BACKUP_DIR.glob("openclaw_*.json"))
+    backups = sorted(backup_dir.glob("openclaw_*.json"))
     for old in backups[:-10]:
         old.unlink()
     return str(dest)
@@ -106,17 +157,18 @@ def backup_config():
 
 def save_config(config: dict) -> str:
     """Validate JSON, backup, then write atomically. Returns backup path."""
+    config_path, openclaw_dir, _ = get_active_paths()
     serialised = json.dumps(config, indent=2, ensure_ascii=False)
     json.loads(serialised)  # Re-parse to catch edge cases
 
     backup_path = backup_config()
-    OPENCLAW_DIR.mkdir(parents=True, exist_ok=True)
+    openclaw_dir.mkdir(parents=True, exist_ok=True)
 
     # Write to temp file first, then rename (atomic on POSIX)
-    tmp = CONFIG_PATH.with_suffix(".tmp")
+    tmp = config_path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(serialised)
-    tmp.replace(CONFIG_PATH)
+    tmp.replace(config_path)
 
     return backup_path
 
@@ -783,6 +835,29 @@ def build_status(cfg: dict) -> list:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+@app.route("/api/users")
+@login_required
+def api_users():
+    users = discover_user_configs()
+    active = session.get("active_config_path", str(CONFIG_PATH))
+    return jsonify({"users": users, "active": active})
+
+
+@app.route("/api/select-user", methods=["POST"])
+@login_required
+def api_select_user():
+    data = request.json or {}
+    path_str = data.get("path", "")
+    known = {u["path"] for u in discover_user_configs()}
+    if path_str not in known:
+        return jsonify({"success": False, "error": "Config path inválido."}), 400
+    p = Path(path_str)
+    if not os.access(p, os.R_OK):
+        return jsonify({"success": False, "error": "Sem permissão de leitura."}), 403
+    session["active_config_path"] = path_str
+    return jsonify({"success": True, "path": path_str})
+
 
 @app.route("/security-status")
 @login_required
