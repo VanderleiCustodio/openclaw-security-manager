@@ -1,0 +1,2334 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <title>OpenClaw Security Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ── Design tokens — DashStack-inspired ───────────────────── */
+
+    /* Shared constants */
+    :root {
+      --sp1: 8px;  --sp2: 16px;  --sp3: 24px;
+      --sp4: 32px; --sp5: 40px;  --sp6: 48px;
+      --r1: 4px; --r2: 6px; --r3: 10px; --r4: 14px;
+      --sw:  240px; --swc: 60px;
+      --font: 'Inter', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --term-bg: #0D1117;
+      --term-fg: #C9D1D9;
+
+      /* Sidebar — always dark navy, never changes with theme */
+      --sb-bg:      #1B2431;
+      --sb-active:  #273142;
+      --sb-hover:   #1F2D3D;
+      --sb-border:  rgba(255,255,255,.06);
+      --sb-group:   #3D5166;
+      --sb-text:    #8A9BB0;
+      --sb-text-hi: #C8D8E8;
+      --sb-logo:    #FFFFFF;
+
+      /* Accent — always blue, independent of theme */
+      --accent:     #4361EE;
+      --accent-h:   #3451D1;
+      --accent-dim: rgba(67,97,238,.12);
+      --accent-ring:rgba(67,97,238,.30);
+      --accent-sh:  0 2px 8px rgba(67,97,238,.35);
+    }
+
+    /* ── Light theme (default) ─────────────────────────────────── */
+    :root, [data-theme="light"] {
+      --bg:  #F5F6FA;
+      --s1:  #FFFFFF;
+      --s2:  #F0F2F8;
+      --s3:  #E8EBEF;
+      --b1:  #E0E4EC;
+      --b2:  #CDD2DC;
+      --a:       var(--accent);
+      --a-dim:   var(--accent-dim);
+      --a-ring:  var(--accent-ring);
+      --a-deep:  var(--accent);
+      --a-light: var(--accent);
+      --t1: #1B2431;
+      --t2: #4A5568;
+      --t3: #718096;
+      --t4: #A0AEC0;
+      --green:     #16A34A;
+      --green-dim: rgba(22,163,74,.10);
+      --amber:     #D97706;
+      --amber-dim: rgba(217,119,6,.10);
+      --red:       #DC2626;
+      --red-dim:   rgba(220,38,38,.10);
+      --sh1: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+      --sh2: 0 4px 16px rgba(0,0,0,.10);
+    }
+
+    /* ── Dark theme ────────────────────────────────────────────── */
+    [data-theme="dark"] {
+      --bg:  #111827;
+      --s1:  #1E2A3B;
+      --s2:  #273142;
+      --s3:  #2D3A4D;
+      --b1:  #2D3F56;
+      --b2:  #3D5166;
+      --a:       var(--accent);
+      --a-dim:   var(--accent-dim);
+      --a-ring:  var(--accent-ring);
+      --a-deep:  var(--accent);
+      --a-light: #7B93F5;
+      --t1: #F0F4FF;
+      --t2: #C8D8E8;
+      --t3: #8A9BB0;
+      --t4: #5A6A7E;
+      --green:     #22C55E;
+      --green-dim: rgba(34,197,94,.12);
+      --amber:     #F59E0B;
+      --amber-dim: rgba(245,158,11,.12);
+      --red:       #F87171;
+      --red-dim:   rgba(248,113,113,.12);
+      --sh1: 0 1px 3px rgba(0,0,0,.4);
+      --sh2: 0 4px 16px rgba(0,0,0,.5);
+    }
+
+    /* ── Reset & base ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { color-scheme: light dark; }
+    body { font-family: var(--font); font-size: 14px; background: var(--bg); color: var(--t1); line-height: 1.5; letter-spacing: -.01em; }
+    ::selection { background: var(--accent-dim); color: var(--t1); }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--b1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--b2); }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .layout { display: flex; min-height: 100vh; }
+
+    /* ── Sidebar — always dark navy, never follows content theme ── */
+    .sidebar {
+      width: var(--sw); background: var(--sb-bg);
+      border-right: 1px solid var(--sb-border);
+      position: fixed; top:0; left:0; bottom:0;
+      display:flex; flex-direction:column; z-index:100;
+      transition: width .2s ease; overflow:hidden;
+    }
+    .sidebar.collapsed { width: var(--swc); }
+
+    .sidebar-logo {
+      padding: 0 var(--sp2);
+      border-bottom: 1px solid var(--sb-border);
+      display: flex; align-items: center; gap: 12px;
+      height: 60px; flex-shrink: 0;
+    }
+    .sidebar-logo-icon { color: var(--accent); flex-shrink:0; }
+    .sidebar-logo-icon svg { width:20px; height:20px; }
+    .sidebar-wordmark {
+      flex:1; overflow:hidden;
+      font-size: 14px; font-weight: 700; color: var(--sb-logo);
+      white-space: nowrap; letter-spacing: -.01em;
+    }
+    .sidebar-wordmark span { font-weight: 400; color: var(--sb-group); font-size: 11px; display:block; margin-top:1px; letter-spacing: 0; }
+    .sidebar-toggle {
+      background: none; border: none; color: var(--sb-group);
+      cursor: pointer; padding: 6px; border-radius: var(--r1);
+      display: flex; flex-shrink:0;
+      transition: color .15s, background .15s;
+    }
+    .sidebar-toggle:hover { color: var(--sb-text-hi); background: rgba(255,255,255,.05); }
+    .sidebar-toggle svg { width:16px; height:16px; }
+    .sidebar.collapsed .sidebar-wordmark { display: none; }
+    .sidebar.collapsed .sidebar-toggle { margin: 0 auto; }
+
+    .sidebar-scroll { flex:1; overflow-y:auto; overflow-x:hidden; padding-bottom: var(--sp2); }
+    .sidebar-scroll::-webkit-scrollbar { width: 3px; }
+    .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--sb-border); border-radius: 2px; }
+
+    .sidebar-group {
+      padding: var(--sp2) var(--sp2) 6px;
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .10em; color: var(--sb-group);
+      white-space: nowrap; overflow: hidden;
+    }
+    .sidebar.collapsed .sidebar-group { opacity: 0; }
+
+    .sidebar-nav { padding: 8px var(--sp1) 0; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 10px; border-radius: var(--r2);
+      font-size: 13px; font-weight: 500; color: var(--sb-text);
+      cursor: pointer; text-decoration: none;
+      transition: background .12s, color .12s;
+      white-space: nowrap; overflow: hidden;
+      position: relative; user-select: none; margin-bottom: 1px;
+    }
+    .nav-item:hover { background: var(--sb-hover); color: var(--sb-text-hi); }
+    .nav-item.active {
+      background: var(--sb-active); color: #FFFFFF;
+      font-weight: 600;
+    }
+    .nav-item.active::before {
+      content: ''; position: absolute;
+      left: 0; top: 5px; bottom: 5px;
+      width: 3px; background: var(--accent);
+      border-radius: 0 3px 3px 0;
+    }
+    .nav-icon {
+      width: 18px; height: 18px; flex-shrink:0;
+      display: flex; align-items:center; justify-content:center;
+    }
+    .nav-icon svg { width: 15px; height: 15px; }
+    .nav-label { flex:1; overflow:hidden; text-overflow:ellipsis; }
+    .nav-badge {
+      font-size: 9px; font-weight: 700;
+      background: rgba(255,255,255,.08); color: var(--sb-group);
+      border-radius: 3px; padding: 1px 5px; flex-shrink:0;
+    }
+    .nav-item.active .nav-badge { background: var(--accent-dim); color: var(--accent); }
+    .sidebar.collapsed .nav-label,
+    .sidebar.collapsed .nav-badge,
+    .sidebar.collapsed .sidebar-group { display: none; }
+    .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
+
+    /* ── Sidebar footer / theme toggle ───────────────────────── */
+    .sidebar-footer {
+      padding: var(--sp1);
+      border-top: 1px solid var(--sb-border);
+      flex-shrink: 0;
+    }
+    .theme-toggle-btn {
+      display: flex; align-items: center; gap: 12px;
+      width: 100%; padding: 8px 10px;
+      border-radius: var(--r2); border: none;
+      background: none; color: var(--sb-text);
+      cursor: pointer; font-size: 13px; font-weight: 500;
+      font-family: var(--font);
+      transition: background .12s, color .12s;
+      white-space: nowrap; overflow: hidden;
+    }
+    .theme-toggle-btn:hover { background: var(--sb-hover); color: var(--sb-text-hi); }
+    .theme-toggle-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+    .sidebar.collapsed .theme-toggle-btn { justify-content: center; padding: 10px; }
+
+    /* ── Main ─────────────────────────────────────────────────── */
+    .main { margin-left: var(--sw); flex:1; padding: var(--sp4) var(--sp4) var(--sp6); max-width: 1100px; transition: margin-left .2s ease; }
+    body.sidebar-collapsed .main { margin-left: var(--swc); }
+
+    /* ── Page header ──────────────────────────────────────────── */
+    .page-header { display:flex; align-items:center; gap:var(--sp2); margin-bottom:var(--sp3); }
+    .page-header-icon {
+      width:40px; height:40px;
+      background: var(--accent-dim); border:1px solid var(--accent-ring);
+      border-radius:var(--r3); display:flex; align-items:center; justify-content:center;
+      color: var(--accent); flex-shrink:0;
+    }
+    .page-header-icon svg { width:20px; height:20px; }
+    .page-header-text h2 { font-size:20px; font-weight:700; color:var(--t1); letter-spacing:-.03em; }
+    .page-header-text .meta { margin-top:3px; }
+
+    /* ── Sections ─────────────────────────────────────────────── */
+    .section { display: none; }
+    .section.active {
+      display: block;
+      animation: fadeUp .18s ease both;
+    }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform:none; } }
+
+    /* Section header — sits above the cards */
+    .section-header {
+      display: flex; align-items: center; gap: var(--sp2);
+      margin-bottom: var(--sp2);
+      padding-bottom: var(--sp2);
+      border-bottom: 1px solid var(--b1);
+    }
+    .section-header h2 {
+      font-size: 14px; font-weight: 600;
+      color: var(--t2); letter-spacing: -.01em; flex:1;
+      text-transform: uppercase; letter-spacing: .05em; font-size:11px;
+    }
+    .section-icon {
+      width: 32px; height: 32px;
+      background: var(--accent-dim); border-radius: var(--r2);
+      border: 1px solid var(--accent-ring);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent); flex-shrink: 0;
+    }
+    .section-icon svg { width: 15px; height: 15px; }
+
+    /* ── Sub-cards grid ───────────────────────────────────────── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: var(--sp2);
+      margin-bottom: var(--sp2);
+    }
+    .cards-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+    .cards-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .cards-grid.full   { grid-template-columns: 1fr; }
+
+    .card {
+      background: var(--s1);
+      border: 1px solid var(--b1);
+      border-radius: var(--r3);
+      padding: var(--sp2);
+      box-shadow: var(--sh1);
+    }
+    .card-warn {
+      border-color: rgba(217,119,6,.35);
+    }
+    [data-theme="dark"] .card-warn { border-color: rgba(245,158,11,.25); }
+
+    .card-label {
+      font-size: 9px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .08em;
+      color: var(--t4); margin-bottom: var(--sp1);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .card-label.warn { color: var(--amber); }
+
+    /* ── Form rows (inside cards) ─────────────────────────────── */
+    .row {
+      display: flex; align-items: flex-start;
+      gap: var(--sp2); padding: 10px 0;
+      border-bottom: 1px solid var(--b1);
+    }
+    .row:first-child { padding-top: 0; }
+    .row:last-of-type { border-bottom: none; padding-bottom: 0; }
+    .row > label {
+      font-size: 11px; font-weight: 500; color: var(--t3);
+      min-width: 180px; max-width: 180px;
+      padding-top: 7px; flex-shrink: 0;
+      font-family: var(--mono);
+    }
+
+    /* Row field — label above input inside a card */
+    .field { margin-bottom: 10px; }
+    .field:last-child { margin-bottom: 0; }
+    .field-label {
+      font-size: 10px; color: var(--t3);
+      font-family: var(--mono); margin-bottom: 4px;
+      display: block;
+    }
+    .field-label.warn { color: var(--amber); }
+
+    .hint { font-size: 11px; color: var(--t4); margin-top: 4px; line-height: 1.5; }
+    .hint a { color: var(--accent); text-decoration: none; }
+    .hint a:hover { text-decoration: underline; }
+
+    /* ── Inputs & Selects ─────────────────────────────────────── */
+    select, input[type="text"], input[type="number"] {
+      background: var(--s2); color: var(--t1);
+      border: 1px solid var(--b1); border-radius: var(--r2);
+      padding: 7px 11px; font-size: 13px; font-family: var(--font);
+      outline: none; transition: border-color .15s, box-shadow .15s;
+      min-width: 0; width: 100%; appearance: none; -webkit-appearance: none;
+    }
+    select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23A0AEC0'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position: right 10px center; padding-right: 28px; }
+    select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+    select option { background: var(--s2); }
+    select.warn { border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber-dim); }
+    select.ok   { border-color: var(--green); }
+    input[type="checkbox"] { display: none; }
+
+    /* ── Toggle switch ────────────────────────────────────────── */
+    .toggle-switch { display:inline-flex; align-items:center; gap:10px; cursor:pointer; user-select:none; padding-top:6px; }
+    .toggle-track { position:relative; width:40px; height:22px; background:var(--b1); border-radius:11px; border:1px solid var(--b2); transition:background .2s, border-color .2s; flex-shrink:0; }
+    .toggle-switch input:checked + .toggle-track { background: var(--accent); border-color: var(--accent); }
+    .toggle-thumb { position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; box-shadow:0 1px 4px rgba(0,0,0,.25); transition:transform .2s ease; }
+    .toggle-switch input:checked + .toggle-track .toggle-thumb { transform:translateX(18px); }
+    .toggle-label { font-size:13px; color:var(--t2); }
+
+    /* ── Value badges ─────────────────────────────────────────── */
+    .value-badge { display:inline-block; font-size:11px; padding:2px 7px; border-radius:var(--r1); font-family:var(--mono); background:var(--s3); color:var(--t3); }
+    .value-badge.empty { background:var(--red-dim); color:var(--red); }
+    .value-badge.set   { background:var(--green-dim); color:var(--green); }
+
+    /* ── Buttons ──────────────────────────────────────────────── */
+    button {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border: 1px solid transparent;
+      border-radius: var(--r2); cursor: pointer;
+      font-size: 13px; font-weight: 500; font-family: var(--font);
+      transition: background .15s, box-shadow .15s, opacity .15s; outline: none;
+      letter-spacing: -.01em;
+    }
+    button svg { width: 14px; height: 14px; }
+    button:hover  { opacity: .88; }
+    button:active { opacity: .72; }
+    .btn-ghost   { background: var(--s1); color: var(--t2); border-color: var(--b1); }
+    .btn-ghost:hover { color: var(--t1); border-color: var(--b2); background: var(--s2); }
+    .btn-preview { background: var(--s1); color: var(--t3); border-color: var(--b1); }
+    .btn-apply   { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: var(--accent-sh); font-weight: 600; }
+    .btn-apply:hover { background: var(--accent-h); border-color: var(--accent-h); opacity: 1; }
+    .btn-fix     { background: var(--green-dim); color: var(--green); border-color: rgba(22,163,74,.2); }
+    .btn-audit   { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-ring); }
+    .btn-preset  { background: var(--red); color: #fff; border-color: var(--red); font-weight: 600; padding: 10px 20px; box-shadow: 0 2px 12px rgba(220,38,38,.25); }
+    .btn-restore { background: var(--s2); color: var(--t3); border-color: var(--b1); font-size: 12px; padding: 4px 10px; }
+    .btn-refresh { background: var(--s2); color: var(--t3); border-color: var(--b1); font-size: 12px; padding: 6px 12px; margin-left: auto; }
+
+    /* ── Actions bar ──────────────────────────────────────────── */
+    .actions {
+      display: flex; gap: var(--sp1); margin-top: var(--sp3);
+      padding-top: var(--sp2); border-top: 1px solid var(--b1); flex-wrap: wrap;
+    }
+
+    /* ── Diff panel ───────────────────────────────────────────── */
+    .diff-panel { display:none; margin-top:var(--sp2); }
+    .diff-panel.visible { display:block; }
+    .diff-title { font-size:11px; font-weight:600; color:var(--t4); margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em; }
+    .diff-row { display:flex; gap:8px; font-size:12px; font-family:var(--mono); margin:3px 0; flex-wrap:wrap; }
+    .diff-path   { color:var(--t2); min-width:200px; }
+    .diff-before { color:var(--red); text-decoration:line-through; }
+    .diff-after  { color:var(--green); }
+    .diff-arrow  { color:var(--t4); }
+    .diff-empty  { color:var(--t4); font-style:italic; }
+
+    /* ── Status table ─────────────────────────────────────────── */
+    .s-ok      { color:var(--green); font-weight:600; }
+    .s-warn    { color:var(--amber); font-weight:600; }
+    .s-missing { color:var(--red);   font-weight:600; }
+    .risk-critical { background:var(--red-dim);   color:var(--red);   padding:2px 8px; border-radius:var(--r1); font-size:11px; font-weight:600; }
+    .risk-high     { background:var(--amber-dim); color:var(--amber); padding:2px 8px; border-radius:var(--r1); font-size:11px; font-weight:600; }
+    .risk-medium   { background:var(--accent-dim); color:var(--accent);  padding:2px 8px; border-radius:var(--r1); font-size:11px; font-weight:600; }
+    .risk-low      { background:var(--green-dim); color:var(--green); padding:2px 8px; border-radius:var(--r1); font-size:11px; font-weight:600; }
+    #status-score { font-size:14px; margin-bottom:var(--sp2); color:var(--t2); }
+    #status-table { width:100%; border-collapse:collapse; font-size:13px; }
+    #status-table thead tr { background:var(--s2); }
+    #status-table th { padding:9px 12px; border-bottom:1px solid var(--b1); font-size:11px; font-weight:600; color:var(--t4); text-align:left; text-transform:uppercase; letter-spacing:.05em; }
+    #status-tbody tr:hover { background:var(--s2); }
+    #status-tbody td { padding:9px 12px; border-bottom:1px solid var(--b1); vertical-align:middle; }
+    .score-bar  { height:4px; border-radius:2px; background:var(--s3); margin-top:8px; }
+    .score-fill { height:100%; border-radius:2px; transition:width .5s ease; }
+
+    /* ── Code outputs ─────────────────────────────────────────── */
+    #audit-output, #config-preview {
+      font-family:var(--mono); font-size:12px; padding:var(--sp2);
+      border-radius:var(--r3); border:1px solid var(--b1);
+      white-space:pre-wrap; display:none; margin-top:var(--sp2);
+      max-height:400px; overflow-y:auto; line-height:1.6;
+    }
+    #audit-output  { background:var(--term-bg); color:var(--term-fg); }
+    #config-preview{ background:var(--term-bg); color:var(--term-fg); }
+
+    /* ── Permissions ──────────────────────────────────────────── */
+    .perm-row { display:flex; align-items:center; gap:12px; margin:8px 0; font-size:13px; flex-wrap:wrap; }
+    .perm-ok   { color:var(--green); font-weight:600; }
+    .perm-warn { color:var(--amber); font-weight:600; }
+    .perm-na   { color:var(--t4); }
+
+    /* ── Toast ────────────────────────────────────────────────── */
+    #toast {
+      display:none; position:fixed; bottom:var(--sp3); right:var(--sp3);
+      background:var(--s2); color:var(--t1); border:1px solid var(--b1);
+      padding:12px 16px; border-radius:var(--r3); max-width:400px;
+      z-index:9999; font-size:13px; line-height:1.5; box-shadow:var(--sh2);
+    }
+    #toast.show  { display:block; }
+    #toast.error { background:var(--red-dim); border-color:var(--red); color:var(--red); }
+
+    /* ── Meta / tags ──────────────────────────────────────────── */
+    .meta { font-size:11px; color:var(--t4); display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px; }
+    .meta code { font-family:var(--mono); color:var(--a); }
+    .tag      { display:inline-block; font-size:10px; padding:2px 7px; border-radius:var(--r1); font-weight:600; background:var(--amber-dim); color:var(--amber); }
+    .tag.safe { background:var(--green-dim); color:var(--green); }
+    .tag-sm   { display:inline-block; font-size:10px; padding:2px 7px; border-radius:var(--r1); font-weight:600; }
+    .tag-sm.ok  { background:var(--green-dim); color:var(--green); }
+    .tag-sm.err { background:var(--red-dim); color:var(--red); }
+
+    /* ── Gateway errors ───────────────────────────────────────── */
+    .gw-err-row { padding:10px 12px; background:rgba(239,68,68,.03); border:1px solid var(--b1); border-radius:var(--r2); margin-bottom:4px; font-size:12px; font-family:var(--mono); }
+    .gw-err-top { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+    .gw-err-time { color:var(--t4); white-space:nowrap; min-width:180px; }
+    .gw-err-sub  { color:var(--a-light); min-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .gw-err-msg  { color:var(--red); flex:1; white-space:pre-wrap; word-break:break-word; }
+    .gw-err-count{ background:var(--red-dim); color:var(--red); border-radius:var(--r1); padding:1px 6px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .gw-err-diag { margin-top:6px; padding:8px 10px; background:var(--amber-dim); border-left:2px solid var(--amber); border-radius:var(--r1); color:var(--amber); font-size:12px; font-family:var(--font); line-height:1.5; }
+
+    /* ── Chips (plugins / elevation allowFrom) ───────────────── */
+    .chip-group { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px; min-height:28px; }
+    .chip { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:12px; font-family:var(--mono); cursor:default; user-select:none; }
+    .chip-allow   { background:var(--green-dim); color:var(--green); border:1px solid rgba(34,197,94,.22); }
+    .chip-deny    { background:var(--red-dim);   color:var(--red);   border:1px solid rgba(239,68,68,.22); }
+    .chip-neutral { background:var(--accent-dim); color:var(--t2);    border:1px solid var(--b1); }
+    .chip-remove  { opacity:.55; font-size:15px; line-height:1; cursor:pointer; padding:0 1px; }
+    .chip-remove:hover { opacity:1; }
+    .chip-add-row { display:flex; gap:6px; margin-top:4px; }
+    .chip-add-row input { flex:1; min-width:0; }
+    .chip-disabled { opacity:.35; pointer-events:none; }
+
+    /* ── Config Diff grid ─────────────────────────────────────── */
+    .diff-grid { display:grid; grid-template-columns:1fr 1fr; gap:2px; border-radius:var(--r2); overflow:hidden; margin-top:var(--sp1); }
+    .diff-cell { padding:5px 10px; font-family:var(--mono); font-size:12px; line-height:1.5; }
+    .diff-cell.removed { background:var(--red-dim);   color:var(--red); }
+    .diff-cell.added   { background:var(--green-dim); color:var(--green); }
+    .diff-cell.same    { background:var(--s2);        color:var(--t4); }
+    .diff-grid-header  { font-size:11px; font-weight:600; color:var(--t4); text-transform:uppercase; letter-spacing:.05em; padding:6px 10px; background:var(--s3); }
+
+    /* ── Backup list ──────────────────────────────────────────── */
+    .backup-list { font-size:12px; }
+    .backup-item { display:flex; align-items:center; gap:8px; margin:6px 0; padding:8px 10px; background:var(--s2); border-radius:var(--r2); }
+    .backup-item code { font-family:var(--mono); color:var(--t2); }
+
+    /* ── Code inline ──────────────────────────────────────────── */
+    code { font-family:var(--mono); font-size:.85em; color:var(--accent); background:var(--accent-dim); padding:1px 5px; border-radius:var(--r1); }
+
+    /* ── Details/summary ─────────────────────────────────────── */
+    details { margin-top:var(--sp2); }
+    details summary { cursor:pointer; font-size:13px; font-weight:500; color:var(--t3); padding:10px 12px; background:var(--s2); border:1px solid var(--b1); border-radius:var(--r2); list-style:none; user-select:none; }
+    details summary::-webkit-details-marker { display:none; }
+    details summary::before { content:'›'; margin-right:8px; display:inline-block; transition:transform .15s; }
+    details[open] summary::before { transform:rotate(90deg); }
+    details > div { padding:16px; background:var(--s2); border:1px solid var(--b1); border-top:none; border-radius:0 0 var(--r2) var(--r2); font-size:13px; line-height:2; color:var(--t2); }
+
+    /* ── Profile cards ───────────────────────────────────────── */
+    .profile-card {
+      background: var(--s1); border: 1px solid var(--b1);
+      border-radius: var(--r3); padding: var(--sp3);
+      box-shadow: var(--sh1); display: flex; flex-direction: column; gap: var(--sp1);
+      transition: box-shadow .15s, border-color .15s;
+    }
+    .profile-card:hover { box-shadow: var(--sh2); border-color: var(--b2); }
+    .profile-card-header {
+      display: flex; align-items: center; gap: var(--sp1); margin-bottom: 4px;
+    }
+    .profile-card-icon {
+      font-size: 22px; flex-shrink: 0; line-height: 1;
+    }
+    .profile-card-title {
+      font-size: 15px; font-weight: 700; color: var(--t1); letter-spacing: -.02em;
+    }
+    .profile-card-desc {
+      font-size: 12px; color: var(--t3); line-height: 1.55;
+    }
+    .profile-card-meta {
+      display: flex; align-items: center; gap: var(--sp1); flex-wrap: wrap; margin: 4px 0;
+    }
+    .profile-changes-badge {
+      font-size: 11px; font-weight: 700; padding: 2px 9px;
+      border-radius: var(--r1); background: var(--accent-dim); color: var(--accent);
+      font-family: var(--mono);
+    }
+    .profile-level-low    { background: var(--green-dim); color: var(--green); }
+    .profile-level-medium { background: var(--amber-dim); color: var(--amber); }
+    .profile-level-high   { background: var(--red-dim);   color: var(--red); }
+    .profile-level-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: var(--r1); text-transform: uppercase; letter-spacing: .05em;
+    }
+    .profile-card-actions {
+      display: flex; gap: 6px; margin-top: auto; padding-top: var(--sp1);
+    }
+    .profile-diff-panel {
+      margin-top: var(--sp1); font-size: 12px; font-family: var(--mono);
+      background: var(--s2); border: 1px solid var(--b1); border-radius: var(--r2);
+      padding: var(--sp1) var(--sp2); display: none; white-space: pre-wrap;
+      max-height: 260px; overflow-y: auto; line-height: 1.6;
+    }
+    .profile-diff-panel.visible { display: block; }
+
+    /* ── Checklist ────────────────────────────────────────────── */
+    .checklist-group { margin-bottom: var(--sp3); }
+    .checklist-group-header {
+      display: flex; align-items: center; gap: var(--sp1);
+      margin-bottom: var(--sp1); padding-bottom: 6px;
+      border-bottom: 1px solid var(--b1);
+    }
+    .checklist-group-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--t3);
+    }
+    .checklist-group-count {
+      font-size: 10px; font-weight: 700; padding: 1px 7px;
+      border-radius: var(--r1); margin-left: auto;
+      background: var(--s2); color: var(--t4);
+    }
+    .checklist-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 9px 10px; border-radius: var(--r2);
+      border: 1px solid transparent; margin-bottom: 4px;
+      background: var(--s1); transition: background .1s;
+    }
+    .checklist-item:hover { background: var(--s2); }
+    .checklist-item-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+    .checklist-item-body { flex: 1; min-width: 0; }
+    .checklist-item-label {
+      font-size: 13px; font-weight: 500; color: var(--t1); margin-bottom: 2px;
+    }
+    .checklist-item-values {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px;
+    }
+    .checklist-item-current { color: var(--t4); font-family: var(--mono); }
+    .checklist-item-rec     { color: var(--green); font-family: var(--mono); }
+    .checklist-item-arrow   { color: var(--t4); }
+    .checklist-hint-toggle  {
+      font-size: 11px; color: var(--accent); cursor: pointer; margin-left: auto;
+      flex-shrink: 0; padding: 2px 6px; border-radius: var(--r1);
+      border: 1px solid var(--accent-ring); background: var(--accent-dim);
+      white-space: nowrap; align-self: flex-start;
+    }
+    .checklist-hint-toggle:hover { background: var(--accent-ring); }
+    .checklist-hint-text {
+      font-size: 12px; color: var(--t3); line-height: 1.55;
+      margin-top: 6px; padding: 8px 10px; background: var(--s2);
+      border-left: 2px solid var(--b2); border-radius: 0 var(--r1) var(--r1) 0;
+      display: none;
+    }
+    .checklist-hint-text.visible { display: block; }
+    .checklist-summary-bar {
+      display: flex; align-items: center; gap: var(--sp2);
+      padding: var(--sp2); background: var(--s1); border: 1px solid var(--b1);
+      border-radius: var(--r3); margin-bottom: var(--sp3); box-shadow: var(--sh1);
+    }
+    .checklist-summary-label { font-size: 13px; color: var(--t2); flex: 1; }
+    .checklist-summary-pct   { font-size: 20px; font-weight: 700; color: var(--t1); }
+    .checklist-progress { flex: 1; height: 6px; background: var(--s3); border-radius: 3px; overflow: hidden; max-width: 200px; }
+    .checklist-progress-fill { height: 100%; border-radius: 3px; transition: width .4s ease; }
+
+    /* ── Nono ─────────────────────────────────────────────────── */
+    #nono-status { background:var(--s2); border:1px solid var(--b1); border-radius:var(--r2); padding:10px 14px; font-size:13px; margin-bottom:var(--sp2); }
+    #nono-cmd-preview, #nono-systemd-content, #nono-check-output { font-family:var(--mono) !important; background:var(--term-bg) !important; color:var(--term-fg) !important; border:1px solid var(--b1) !important; border-radius:var(--r2) !important; }
+    #nono-custom { border-left:2px solid var(--b2); padding-left:var(--sp2); margin:10px 0; }
+
+    /* ── Mobile menu ──────────────────────────────────────────── */
+    .mobile-menu-btn {
+      display: none;
+      position: fixed; top: var(--sp2); left: var(--sp2); z-index: 200;
+      background: var(--sb-bg); border: 1px solid var(--sb-border);
+      border-radius: var(--r2); padding: 8px; color: var(--sb-text); cursor: pointer;
+      align-items: center; justify-content: center;
+    }
+    .mobile-menu-btn svg { width: 18px; height: 18px; }
+    .mobile-overlay {
+      display: none; position: fixed; inset:0; background: rgba(0,0,0,.6);
+      z-index: 99; backdrop-filter: blur(2px);
+    }
+    .mobile-overlay.visible { display: block; }
+
+    /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 1024px) {
+      .sidebar { width: var(--swc); }
+      .sidebar .sidebar-wordmark,
+      .sidebar .nav-label,
+      .sidebar .nav-badge,
+      .sidebar .sidebar-group { display: none; }
+      .sidebar .nav-item { justify-content: center; padding: 10px; }
+      .sidebar .sidebar-toggle { margin: 0 auto; }
+      .main { margin-left: var(--swc); padding: var(--sp3); }
+    }
+    @media (max-width: 640px) {
+      .sidebar { transform: translateX(-100%); width: var(--sw) !important; transition: transform .25s ease; }
+      .sidebar.mobile-open { transform: translateX(0); }
+      .sidebar .sidebar-wordmark,
+      .sidebar .nav-label,
+      .sidebar .nav-badge,
+      .sidebar .sidebar-group { display: block !important; }
+      .sidebar .nav-item { justify-content: flex-start !important; padding: 8px 10px !important; }
+      .main { margin-left: 0 !important; padding: var(--sp2); }
+      .mobile-menu-btn { display: flex !important; }
+      .row { flex-direction: column; gap: var(--sp1); }
+      .row > label { min-width: unset; max-width: unset; padding-top: 0; }
+      select, input[type="text"], input[type="number"] { min-width: unset; width: 100%; }
+      .page-header-text h2 { font-size: 15px; }
+      .section.active { padding: var(--sp2); }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- Mobile overlay -->
+<div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileMenu()"></div>
+
+<!-- Mobile menu button -->
+<button class="mobile-menu-btn" id="mobile-menu-btn" onclick="openMobileMenu()">
+  <i data-lucide="menu"></i>
+</button>
+
+<!-- ══════════════════════════ SIDEBAR ══════════════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <span class="sidebar-logo-icon"><i data-lucide="shield-check"></i></span>
+    <div class="sidebar-wordmark">
+      OpenClaw
+      <span>Security Manager</span>
+    </div>
+    <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
+      <i data-lucide="panel-left-close"></i>
+    </button>
+  </div>
+  <div class="sidebar-scroll">
+    <nav class="sidebar-nav">
+      <div class="sidebar-group">Monitoramento</div>
+      <a class="nav-item" onclick="showSection('status-section')" data-section="status-section">
+        <span class="nav-icon"><i data-lucide="shield"></i></span>
+        <span class="nav-label">Status de Segurança</span>
+      </a>
+      <a class="nav-item" onclick="showSection('gw-errors-section')" data-section="gw-errors-section">
+        <span class="nav-icon"><i data-lucide="alert-triangle"></i></span>
+        <span class="nav-label">Erros do Gateway</span>
+      </a>
+
+      <div class="sidebar-group">Ações</div>
+      <a class="nav-item" onclick="showSection('preset-section')" data-section="preset-section">
+        <span class="nav-icon"><i data-lucide="zap"></i></span>
+        <span class="nav-label">Preset de Segurança</span>
+      </a>
+      <a class="nav-item" onclick="showSection('profiles-section')" data-section="profiles-section">
+        <span class="nav-icon"><i data-lucide="layers"></i></span>
+        <span class="nav-label">Perfis de Segurança</span>
+      </a>
+      <a class="nav-item" onclick="showSection('checklist-section')" data-section="checklist-section">
+        <span class="nav-icon"><i data-lucide="clipboard-check"></i></span>
+        <span class="nav-label">Checklist de Segurança</span>
+      </a>
+
+      <div class="sidebar-group">Configurações</div>
+      <a class="nav-item" onclick="showSection('dm-section')" data-section="dm-section">
+        <span class="nav-icon"><i data-lucide="message-square"></i></span>
+        <span class="nav-label">DM Pairing</span>
+        <span class="nav-badge">1</span>
+      </a>
+      <a class="nav-item" onclick="showSection('gateway-section')" data-section="gateway-section">
+        <span class="nav-icon"><i data-lucide="globe"></i></span>
+        <span class="nav-label">Gateway</span>
+        <span class="nav-badge">2</span>
+      </a>
+      <a class="nav-item" onclick="showSection('sandbox-section')" data-section="sandbox-section">
+        <span class="nav-icon"><i data-lucide="box"></i></span>
+        <span class="nav-label">Sandbox</span>
+        <span class="nav-badge">3</span>
+      </a>
+      <a class="nav-item" onclick="showSection('tools-section')" data-section="tools-section">
+        <span class="nav-icon"><i data-lucide="wrench"></i></span>
+        <span class="nav-label">Ferramentas</span>
+        <span class="nav-badge">4</span>
+      </a>
+      <a class="nav-item" onclick="showSection('logging-section')" data-section="logging-section">
+        <span class="nav-icon"><i data-lucide="file-text"></i></span>
+        <span class="nav-label">Audit Logging</span>
+        <span class="nav-badge">5</span>
+      </a>
+      <a class="nav-item" onclick="showSection('model-section')" data-section="model-section">
+        <span class="nav-icon"><i data-lucide="cpu"></i></span>
+        <span class="nav-label">Modelo</span>
+        <span class="nav-badge">6</span>
+      </a>
+      <a class="nav-item" onclick="showSection('permissions-section')" data-section="permissions-section">
+        <span class="nav-icon"><i data-lucide="lock"></i></span>
+        <span class="nav-label">Permissões</span>
+        <span class="nav-badge">7</span>
+      </a>
+      <a class="nav-item" onclick="showSection('audit-section')" data-section="audit-section">
+        <span class="nav-icon"><i data-lucide="search"></i></span>
+        <span class="nav-label">Security Audit</span>
+        <span class="nav-badge">8</span>
+      </a>
+      <a class="nav-item" onclick="showSection('nono-section')" data-section="nono-section">
+        <span class="nav-icon"><i data-lucide="server"></i></span>
+        <span class="nav-label">nono Sandbox</span>
+        <span class="nav-badge">9</span>
+      </a>
+      <a class="nav-item" onclick="showSection('plugins-section')" data-section="plugins-section">
+        <span class="nav-icon"><i data-lucide="puzzle"></i></span>
+        <span class="nav-label">Plugins</span>
+        <span class="nav-badge">10</span>
+      </a>
+
+      <div class="sidebar-group">Dados</div>
+      <a class="nav-item" onclick="showSection('config-section')" data-section="config-section">
+        <span class="nav-icon"><i data-lucide="file-code"></i></span>
+        <span class="nav-label">Config JSON</span>
+      </a>
+      <a class="nav-item" onclick="showSection('config-diff-section')" data-section="config-diff-section">
+        <span class="nav-icon"><i data-lucide="git-compare"></i></span>
+        <span class="nav-label">Config Diff</span>
+      </a>
+      <a class="nav-item" onclick="showSection('backups-section')" data-section="backups-section">
+        <span class="nav-icon"><i data-lucide="hard-drive"></i></span>
+        <span class="nav-label">Backups</span>
+      </a>
+    </nav>
+  </div>
+
+  <!-- Sidebar footer: theme toggle -->
+  <div class="sidebar-footer">
+    <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Alternar tema claro / escuro">
+      <i data-lucide="sun" id="theme-icon"></i>
+      <span class="nav-label" id="theme-label">Tema claro</span>
+    </button>
+  </div>
+</aside>
+
+<!-- ══════════════════════════ MAIN ══════════════════════════════ -->
+<main class="main">
+
+<div class="page-header">
+  <div class="page-header-icon" id="page-header-icon">
+    <i data-lucide="shield" id="page-header-lucide"></i>
+  </div>
+  <div class="page-header-text">
+    <h2 id="page-header-title">Status de Segurança</h2>
+    <div class="meta">
+      <code>{{ state.config_path }}</code>
+      {% if state.config_exists %}
+        <span class="tag safe">encontrado</span>
+      {% else %}
+        <span class="tag">não existe — será criado</span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ STATUS PANEL -->
+<div class="section" id="status-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="shield"></i></span>
+    <h2>Status de Segurança — Atual vs Recomendado</h2>
+    <button onclick="loadStatus()" style="background:#e5e7eb;color:#111;margin-left:auto;font-size:12px;padding:5px 10px">🔄 Atualizar</button>
+  </div>
+
+  <div id="status-score" style="font-size:14px;margin-bottom:12px;color:#6b7280">Carregando...</div>
+
+  <table id="status-table" style="width:100%;border-collapse:collapse;font-size:13px;display:none">
+    <thead>
+      <tr style="background:#f1f5f9;text-align:left">
+        <th style="padding:7px 10px;border-bottom:1px solid #e2e8f0;width:30px"></th>
+        <th style="padding:7px 10px;border-bottom:1px solid #e2e8f0">Campo</th>
+        <th style="padding:7px 10px;border-bottom:1px solid #e2e8f0">Path no JSON</th>
+        <th style="padding:7px 10px;border-bottom:1px solid #e2e8f0">Valor atual</th>
+        <th style="padding:7px 10px;border-bottom:1px solid #e2e8f0">Recomendado</th>
+        <th style="padding:7px 10px;border-bottom:1px solid #e2e8f0">Risco</th>
+      </tr>
+    </thead>
+    <tbody id="status-tbody"></tbody>
+  </table>
+</div>
+
+
+<script>
+async function loadStatus() {
+  const scoreEl = document.getElementById('status-score');
+  const tableEl = document.getElementById('status-table');
+  const tbody   = document.getElementById('status-tbody');
+  scoreEl.textContent = 'Carregando...';
+
+  const res  = await fetch('/security-status');
+  const data = await res.json();
+  const pct  = Math.round((data.ok / data.total) * 100);
+
+  const color = pct >= 80 ? '#059669' : pct >= 50 ? '#d97706' : '#dc2626';
+  scoreEl.innerHTML = `
+    <strong>${data.ok} / ${data.total}</strong> configurações corretas
+    <span style="color:${color};margin-left:8px">${pct}%</span>
+    <div class="score-bar"><div class="score-fill" style="width:${pct}%;background:${color}"></div></div>
+  `;
+
+  tbody.innerHTML = data.rows.map(r => {
+    const icon = r.status === 'ok' ? '✅' : r.status === 'missing' ? '🔴' : '⚠️';
+    const cls  = r.status === 'ok' ? 's-ok' : r.status === 'missing' ? 's-missing' : 's-warn';
+    const cur  = r.current === '— não definido —'
+      ? `<em style="color:#9ca3af">${r.current}</em>`
+      : `<code>${r.current}</code>`;
+    return `<tr>
+      <td style="text-align:center">${icon}</td>
+      <td class="${cls}">${r.label}</td>
+      <td><code style="font-size:11px;color:#6b7280">${r.path}</code></td>
+      <td>${cur}</td>
+      <td><code>${r.recommended}</code></td>
+      <td><span class="risk-${r.risk}">${r.risk}</span></td>
+    </tr>`;
+  }).join('');
+
+  tableEl.style.display = 'table';
+}
+loadStatus();
+</script>
+
+<!-- ============================================================ GATEWAY ERRORS -->
+<div class="section" id="gw-errors-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="alert-triangle"></i></span>
+    <h2>Erros do Gateway <span id="gw-error-badge" style="display:none;background:#dc2626;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700;margin-left:6px"></span></h2>
+    <button onclick="loadGatewayErrors()" style="background:#e5e7eb;color:#111;margin-left:auto;font-size:12px;padding:5px 10px">🔄 Atualizar</button>
+  </div>
+  <div id="gw-docker-status" style="margin-bottom:12px;font-size:13px">Verificando Docker...</div>
+  <div id="gw-log-path" style="font-size:11px;color:#9ca3af;margin-bottom:10px"></div>
+  <div id="gw-errors-body" style="font-size:13px;color:#6b7280;font-style:italic">Carregando...</div>
+</div>
+
+
+<script>
+async function loadDockerStatus() {
+  const el = document.getElementById('gw-docker-status');
+  try {
+    const d = await (await fetch('/docker/status')).json();
+    const engineLabel = d.engine === 'podman' ? 'Podman' : 'Docker';
+
+    if (d.running) {
+      el.innerHTML =
+        `<span style="color:var(--green);font-weight:600">${engineLabel} ativo</span>` +
+        ` <span style="color:var(--t3);font-size:12px">${d.detail || ''}</span>` +
+        ` <span style="color:var(--t4);font-size:11px">[${d.platform}]</span>`;
+    } else {
+      // Build platform-specific hint
+      let hint = '';
+      if (d.pipes && d.pipes.length) {
+        hint = ` <span style="color:var(--t3);font-size:11px">(pipes encontrados: ${d.pipes.join(', ')})</span>`;
+      } else if (d.sockets && d.sockets.length) {
+        hint = ` <span style="color:var(--amber);font-size:11px">(sockets: ${d.sockets.join(', ')} — daemon parado?)</span>`;
+      } else if (d.platform === 'Linux') {
+        hint = ` <span style="color:var(--t3);font-size:11px">— tente: <code>sudo systemctl start docker</code></span>`;
+      } else if (d.platform === 'Windows') {
+        hint = ` <span style="color:var(--t3);font-size:11px">— inicie o Docker Desktop</span>`;
+      } else if (d.platform === 'Darwin') {
+        hint = ` <span style="color:var(--t3);font-size:11px">— inicie o Docker Desktop ou Colima</span>`;
+      }
+      el.innerHTML =
+        `<span style="color:var(--red);font-weight:600">${engineLabel} inativo</span>${hint}` +
+        ` <span style="color:var(--t4);font-size:12px">${d.detail || ''}</span>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--t3);font-size:12px">Não foi possível verificar o Docker: ${e}</span>`;
+  }
+}
+
+async function loadGatewayErrors() {
+  loadDockerStatus();
+  const body  = document.getElementById('gw-errors-body');
+  const badge = document.getElementById('gw-error-badge');
+  const pathEl = document.getElementById('gw-log-path');
+  body.textContent = 'Carregando...';
+  try {
+    const data = await (await fetch('/gateway/errors')).json();
+    pathEl.textContent = data.log_file ? `Log: ${data.log_file}` : '';
+    if (!data.found) {
+      body.innerHTML = '<span style="color:#9ca3af">Arquivo de log não encontrado para hoje.</span>';
+      badge.style.display = 'none';
+      document.getElementById('gw-errors-section').classList.remove('has-errors');
+      return;
+    }
+    if (data.read_error) {
+      body.innerHTML = `<span style="color:#dc2626">Erro ao ler log: ${data.read_error}</span>`;
+      return;
+    }
+    if (!data.errors.length) {
+      body.innerHTML = '<span style="color:#059669">✅ Nenhum erro registrado hoje.</span>';
+      badge.style.display = 'none';
+      document.getElementById('gw-errors-section').classList.remove('has-errors');
+      return;
+    }
+    badge.textContent = data.errors.length + (data.errors.length === 100 ? '+' : '');
+    badge.style.display = 'inline';
+    document.getElementById('gw-errors-section').classList.add('has-errors');
+    // Deduplicate: group identical messages
+    const grouped = [];
+    const seen = new Map();
+    for (const e of data.errors) {
+      const key = e.subsystem + '||' + e.message;
+      if (seen.has(key)) { seen.get(key).count++; }
+      else { const entry = {...e, count: 1}; seen.set(key, entry); grouped.push(entry); }
+    }
+    body.innerHTML = grouped.map(e => {
+      const diag = e.diagnosis ? `
+        <div class="gw-err-diag">
+          <strong>⚠️ ${e.diagnosis.title}</strong> — ${e.diagnosis.explanation}
+        </div>` : '';
+      const repeat = e.count > 1 ? `<span class="gw-err-count">×${e.count}</span>` : '';
+      return `<div class="gw-err-row">
+        <div class="gw-err-top">
+          <span class="gw-err-time">${e.time || '—'}</span>
+          <span class="gw-err-sub">${e.subsystem || '—'}</span>
+          ${repeat}
+          <span class="gw-err-msg">${e.message.replace(/</g,'&lt;')}</span>
+        </div>${diag}
+      </div>`;
+    }).join('');
+  } catch(err) {
+    body.innerHTML = `<span style="color:#dc2626">Falha ao buscar erros: ${err}</span>`;
+  }
+}
+loadGatewayErrors();
+</script>
+
+<!-- ============================================================ PRESET -->
+<div class="section" id="preset-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="zap"></i></span>
+    <h2>Aplicar Configuração Segura Completa</h2>
+  </div>
+  <p style="font-size:13px;color:#555;margin:0 0 12px">
+    Aplica todas as recomendações de segurança de uma vez. Faz backup automático antes.
+  </p>
+  <div class="actions">
+    <button class="btn-preview" onclick="previewSection('hardened_preset', {})">👁 Ver o que vai mudar</button>
+    <button class="btn-preset"  onclick="applyPreset()">🛡️ Aplicar Preset de Segurança Máxima</button>
+  </div>
+  <div class="diff-panel" id="diff-hardened_preset"></div>
+</div>
+
+<!-- ============================================================ DM PAIRING -->
+<div class="section" id="dm-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="message-square"></i></span>
+    <h2>1. DM Pairing</h2>
+  </div>
+  <p class="hint">Exige aprovação de remetentes desconhecidos. Códigos expiram em 1h, máximo 3 pendentes por canal.</p>
+
+  <div class="row">
+    <label>WhatsApp — dmPolicy</label>
+    <div>
+      <select id="dm_whatsapp" onchange="markWarn(this, 'open')">
+        <option value="" disabled {% if not state.dm_pairing_whatsapp %}selected{% endif %}>— não configurado —</option>
+        <option value="pairing"  {% if state.dm_pairing_whatsapp == 'pairing'  %}selected{% endif %}>pairing  (recomendado)</option>
+        <option value="allowlist"{% if state.dm_pairing_whatsapp == 'allowlist'%}selected{% endif %}>allowlist</option>
+        <option value="open"     {% if state.dm_pairing_whatsapp == 'open'     %}selected{% endif %}>open ⚠️</option>
+        <option value="disabled" {% if state.dm_pairing_whatsapp == 'disabled' %}selected{% endif %}>disabled</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.dm_pairing_whatsapp %}set{% else %}empty{% endif %}">{{ state.dm_pairing_whatsapp or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Telegram — dmPolicy</label>
+    <div>
+      <select id="dm_telegram" onchange="markWarn(this, 'open')">
+        <option value="" disabled {% if not state.dm_pairing_telegram %}selected{% endif %}>— não configurado —</option>
+        <option value="pairing"  {% if state.dm_pairing_telegram == 'pairing'  %}selected{% endif %}>pairing  (recomendado)</option>
+        <option value="allowlist"{% if state.dm_pairing_telegram == 'allowlist'%}selected{% endif %}>allowlist</option>
+        <option value="open"     {% if state.dm_pairing_telegram == 'open'     %}selected{% endif %}>open ⚠️</option>
+        <option value="disabled" {% if state.dm_pairing_telegram == 'disabled' %}selected{% endif %}>disabled</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.dm_pairing_telegram %}set{% else %}empty{% endif %}">{{ state.dm_pairing_telegram or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Discord — dm.policy</label>
+    <div>
+      <select id="dm_discord" onchange="markWarn(this, 'open')">
+        <option value="" disabled {% if not state.dm_pairing_discord %}selected{% endif %}>— não configurado —</option>
+        <option value="pairing"  {% if state.dm_pairing_discord == 'pairing'  %}selected{% endif %}>pairing  (recomendado)</option>
+        <option value="allowlist"{% if state.dm_pairing_discord == 'allowlist'%}selected{% endif %}>allowlist</option>
+        <option value="open"     {% if state.dm_pairing_discord == 'open'     %}selected{% endif %}>open ⚠️</option>
+        <option value="disabled" {% if state.dm_pairing_discord == 'disabled' %}selected{% endif %}>disabled</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.dm_pairing_discord %}set{% else %}empty{% endif %}">{{ state.dm_pairing_discord or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Grupos exigem @mention (WhatsApp)</label>
+    <div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="group_mention" {% if state.group_require_mention %}checked{% endif %}>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">Ativado</span>
+      </label>
+      <div class="hint">channels.whatsapp.groups["*"].requireMention</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-preview" onclick="previewSection('dm_pairing', getDmChanges())">👁 Preview</button>
+    <button class="btn-apply"   onclick="applySection('dm_pairing',   getDmChanges())">Aplicar</button>
+  </div>
+  <div class="diff-panel" id="diff-dm_pairing"></div>
+</div>
+
+<!-- ============================================================ GATEWAY -->
+<div class="section" id="gateway-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="globe"></i></span>
+    <h2>2. Gateway</h2>
+  </div>
+
+  <div class="row">
+    <label>gateway.bind</label>
+    <div>
+      <select id="gateway_bind" onchange="markWarn(this, 'lan')">
+        <option value="" disabled {% if not state.gateway_bind %}selected{% endif %}>— não configurado —</option>
+        <option value="loopback" {% if state.gateway_bind == 'loopback' %}selected{% endif %}>loopback (recomendado)</option>
+        <option value="lan"      {% if state.gateway_bind == 'lan'      %}selected{% endif %}>lan ⚠️</option>
+        <option value="tailnet"  {% if state.gateway_bind == 'tailnet'  %}selected{% endif %}>tailnet</option>
+        <option value="custom"   {% if state.gateway_bind == 'custom'   %}selected{% endif %}>custom</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.gateway_bind %}set{% else %}empty{% endif %}">{{ state.gateway_bind or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>gateway.port</label>
+    <div>
+      <input type="number" id="gateway_port" placeholder="18789 (padrão)" value="{{ state.gateway_port }}" style="width:140px">
+      <div class="hint">Deixe em branco para não alterar</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>gateway.auth.mode</label>
+    <div>
+      <select id="gateway_auth_mode" onchange="markWarn(this, 'none')">
+        <option value="" disabled {% if not state.gateway_auth_mode %}selected{% endif %}>— não configurado —</option>
+        <option value="token"    {% if state.gateway_auth_mode == 'token'    %}selected{% endif %}>token (recomendado)</option>
+        <option value="password" {% if state.gateway_auth_mode == 'password' %}selected{% endif %}>password</option>
+        <option value="none"     {% if state.gateway_auth_mode == 'none'     %}selected{% endif %}>none ⚠️</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.gateway_auth_mode %}set{% else %}empty{% endif %}">{{ state.gateway_auth_mode or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>gateway.auth.token</label>
+    <div>
+      <input type="text" id="gateway_auth_token" placeholder="Deixe em branco para não alterar" style="width:320px"
+             value="{{ state.gateway_auth_token }}">
+      <div class="hint">Use um token longo e aleatório — nunca versionado no git</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>discovery.mdns.mode</label>
+    <div>
+      <select id="mdns_mode" onchange="markWarn(this, 'full')">
+        <option value="" disabled {% if not state.mdns_mode %}selected{% endif %}>— não configurado —</option>
+        <option value="off"     {% if state.mdns_mode == 'off'     %}selected{% endif %}>off (mais seguro)</option>
+        <option value="minimal" {% if state.mdns_mode == 'minimal' %}selected{% endif %}>minimal (recomendado)</option>
+        <option value="full"    {% if state.mdns_mode == 'full'    %}selected{% endif %}>full ⚠️</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.mdns_mode %}set{% else %}empty{% endif %}">{{ state.mdns_mode or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-preview" onclick="previewSection('gateway', getGatewayChanges())">👁 Preview</button>
+    <button class="btn-apply"   onclick="applySection('gateway',   getGatewayChanges())">Aplicar</button>
+  </div>
+  <div class="diff-panel" id="diff-gateway"></div>
+</div>
+
+<!-- ============================================================ SANDBOX -->
+<div class="section" id="sandbox-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="box"></i></span>
+    <h2>3. Sandbox (Docker)</h2>
+  </div>
+  <p class="hint">Isola execução de ferramentas em containers Docker. Containers rodam sem rede por padrão.</p>
+
+  <div class="row">
+    <label>agents.defaults.sandbox.mode</label>
+    <div>
+      <select id="sandbox_mode" onchange="markWarn(this, 'off')">
+        <option value="" disabled {% if not state.sandbox_mode %}selected{% endif %}>— não configurado —</option>
+        <option value="off"      {% if state.sandbox_mode == 'off'      %}selected{% endif %}>off (padrão — não recomendado) ⚠️</option>
+        <option value="non-main" {% if state.sandbox_mode == 'non-main' %}selected{% endif %}>non-main (recomendado)</option>
+        <option value="all"      {% if state.sandbox_mode == 'all'      %}selected{% endif %}>all</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.sandbox_mode %}set{% else %}empty{% endif %}">{{ state.sandbox_mode or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>agents.defaults.sandbox.scope</label>
+    <div>
+      <select id="sandbox_scope" onchange="markWarn(this, 'shared')">
+        <option value="" disabled {% if not state.sandbox_scope %}selected{% endif %}>— não configurado —</option>
+        <option value="session" {% if state.sandbox_scope == 'session' %}selected{% endif %}>session (recomendado)</option>
+        <option value="agent"   {% if state.sandbox_scope == 'agent'   %}selected{% endif %}>agent</option>
+        <option value="shared"  {% if state.sandbox_scope == 'shared'  %}selected{% endif %}>shared ⚠️</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.sandbox_scope %}set{% else %}empty{% endif %}">{{ state.sandbox_scope or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>agents.defaults.sandbox.workspaceAccess</label>
+    <div>
+      <select id="sandbox_workspace_access" onchange="markWarn(this, 'rw')">
+        <option value="" disabled {% if not state.sandbox_workspace_access %}selected{% endif %}>— não configurado —</option>
+        <option value="none" {% if state.sandbox_workspace_access == 'none' %}selected{% endif %}>none (mais seguro)</option>
+        <option value="ro"   {% if state.sandbox_workspace_access == 'ro'   %}selected{% endif %}>ro (somente leitura)</option>
+        <option value="rw"   {% if state.sandbox_workspace_access == 'rw'   %}selected{% endif %}>rw ⚠️</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.sandbox_workspace_access %}set{% else %}empty{% endif %}">{{ state.sandbox_workspace_access or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-preview" onclick="previewSection('sandbox', getSandboxChanges())">👁 Preview</button>
+    <button class="btn-apply"   onclick="applySection('sandbox',   getSandboxChanges())">Aplicar</button>
+  </div>
+  <div class="diff-panel" id="diff-sandbox"></div>
+</div>
+
+<!-- ============================================================ TOOLS -->
+<div class="section" id="tools-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="wrench"></i></span>
+    <h2>4. Ferramentas (Tools)</h2>
+  </div>
+  <p class="hint">Perfil define um preset. Allow/Deny permitem controle granular. <strong>deny sempre vence.</strong> Se profile estiver preenchido, allow/deny são removidos automaticamente (e vice-versa).</p>
+
+  <div class="row">
+    <label>tools.profile</label>
+    <div>
+      <select id="tools_profile" onchange="markWarn(this, 'full')">
+        <option value="" {% if not state.tools_profile %}selected{% endif %}>— não configurado / usar allow+deny —</option>
+        <option value="full"      {% if state.tools_profile == 'full'      %}selected{% endif %}>full — sem restrições ⚠️</option>
+        <option value="coding"    {% if state.tools_profile == 'coding'    %}selected{% endif %}>coding — filesystem + shell + sessões</option>
+        <option value="messaging" {% if state.tools_profile == 'messaging' %}selected{% endif %}>messaging — só mensagens</option>
+        <option value="minimal"   {% if state.tools_profile == 'minimal'   %}selected{% endif %}>minimal — só session_status</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.tools_profile %}set{% else %}empty{% endif %}">{{ state.tools_profile or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>tools.allow <span style="font-weight:normal">(separado por vírgula)</span></label>
+    <div>
+      <input type="text" id="tools_allow" placeholder="ex: read, group:sessions, group:web" value="{{ state.tools_allow }}" style="width:340px">
+      <div class="hint">Grupos: group:runtime, group:fs, group:sessions, group:web, group:ui, group:messaging</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>tools.deny <span style="font-weight:normal">(separado por vírgula)</span></label>
+    <div>
+      <input type="text" id="tools_deny" placeholder="ex: exec, browser, group:runtime" value="{{ state.tools_deny }}" style="width:340px">
+    </div>
+  </div>
+
+  <!-- Tool Elevation -->
+  <div class="row">
+    <label>elevated.enabled</label>
+    <div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="elevated_enabled" {{ 'checked' if state.elevated_enabled }} onchange="toggleElevatedRow()">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">Ferramentas elevadas</span>
+      </label>
+      <div class="hint">Permite agentes usarem ferramentas com permissões elevadas</div>
+    </div>
+  </div>
+
+  <div class="row" id="elevated-allowfrom-row" style="{{ '' if state.elevated_enabled else 'opacity:.4;pointer-events:none' }}">
+    <label>elevated.allowFrom</label>
+    <div style="flex:1">
+      <div class="chip-group" id="elevated-allowfrom-chips"></div>
+      <div class="chip-add-row">
+        <input type="text" id="elevated-allowfrom-input" placeholder="ex: human, system, agent" onkeydown="if(event.key==='Enter'){addChip('elevated-allowfrom-input','elevated-allowfrom-chips','neutral');event.preventDefault()}">
+        <button class="btn-ghost" onclick="addChip('elevated-allowfrom-input','elevated-allowfrom-chips','neutral')">+ Add</button>
+      </div>
+      <div class="hint">Fontes autorizadas a solicitar ferramentas elevadas</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-preview" onclick="previewSection('tools', getToolsChanges())">Preview</button>
+    <button class="btn-apply"   onclick="applySection('tools',   getToolsChanges())">Aplicar</button>
+  </div>
+  <div class="diff-panel" id="diff-tools"></div>
+</div>
+
+<!-- ============================================================ LOGGING -->
+<div class="section" id="logging-section">
+
+  <div class="cards-grid cols-2">
+    <!-- Card: Arquivo de log -->
+    <div class="card">
+      <div class="card-label">📁 Arquivo de log</div>
+      <div class="field">
+        <label class="field-label" for="log_level">logging.level</label>
+        <select id="log_level">
+          <option value="" disabled {% if not state.log_level %}selected{% endif %}>— não configurado —</option>
+          <option value="debug" {% if state.log_level == 'debug' %}selected{% endif %}>debug</option>
+          <option value="info"  {% if state.log_level == 'info'  %}selected{% endif %}>info (recomendado)</option>
+          <option value="warn"  {% if state.log_level == 'warn'  %}selected{% endif %}>warn</option>
+          <option value="error" {% if state.log_level == 'error' %}selected{% endif %}>error</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="log_file">logging.file</label>
+        <input type="text" id="log_file" placeholder="~/.openclaw/logs/gateway.log" value="{{ state.log_file }}">
+        <div class="hint">Deixe em branco para não alterar</div>
+      </div>
+    </div>
+
+    <!-- Card: Console -->
+    <div class="card">
+      <div class="card-label">🖥 Console</div>
+      <div class="field">
+        <label class="field-label" for="log_console_level">logging.consoleLevel</label>
+        <select id="log_console_level">
+          <option value="" {% if not state.log_console_level %}selected{% endif %}>— não configurado —</option>
+          <option value="debug" {% if state.log_console_level == 'debug' %}selected{% endif %}>debug</option>
+          <option value="info"  {% if state.log_console_level == 'info'  %}selected{% endif %}>info</option>
+          <option value="warn"  {% if state.log_console_level == 'warn'  %}selected{% endif %}>warn</option>
+          <option value="error" {% if state.log_console_level == 'error' %}selected{% endif %}>error</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label" for="log_console_style">logging.consoleStyle</label>
+        <select id="log_console_style">
+          <option value="" {% if not state.log_console_style %}selected{% endif %}>— não configurado —</option>
+          <option value="pretty"  {% if state.log_console_style == 'pretty'  %}selected{% endif %}>pretty</option>
+          <option value="compact" {% if state.log_console_style == 'compact' %}selected{% endif %}>compact</option>
+          <option value="json"    {% if state.log_console_style == 'json'    %}selected{% endif %}>json</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card: Redação — full width, amber warning -->
+  <div class="cards-grid full">
+    <div class="card card-warn">
+      <div class="card-label warn">⚠ Redação de dados sensíveis</div>
+      <div class="field">
+        <label class="field-label warn" for="log_redact">logging.redactSensitive</label>
+        <select id="log_redact" onchange="markWarn(this, 'none')">
+          <option value="" disabled {% if not state.log_redact %}selected{% endif %}>— não configurado —</option>
+          <option value="tools" {% if state.log_redact == 'tools' %}selected{% endif %}>tools (recomendado)</option>
+          <option value="all"   {% if state.log_redact == 'all'   %}selected{% endif %}>all</option>
+          <option value="none"  {% if state.log_redact == 'none'  %}selected{% endif %}>none ⚠️</option>
+        </select>
+        <div class="hint">Valor atual: <span class="value-badge {% if state.log_redact %}set{% else %}empty{% endif %}">{{ state.log_redact or 'não definido' }}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-preview" onclick="previewSection('logging', getLoggingChanges())">👁 Preview</button>
+    <button class="btn-apply"   onclick="applySection('logging',   getLoggingChanges())">Aplicar</button>
+  </div>
+  <div class="diff-panel" id="diff-logging"></div>
+</div>
+
+<!-- ============================================================ MODEL -->
+<div class="section" id="model-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="cpu"></i></span>
+    <h2>6. Modelo</h2>
+  </div>
+  <p class="hint">A escolha do modelo é uma decisão de segurança. Modelos mais fortes resistem melhor a prompt injection.</p>
+
+  <div class="row">
+    <label>agents.defaults.model.primary</label>
+    <div>
+      <select id="model_primary_select" onchange="syncModelInput()">
+        <option value="">— selecionar preset —</option>
+        <option value="anthropic/claude-opus-4-5">claude-opus-4-5 (recomendado para ferramentas)</option>
+        <option value="anthropic/claude-sonnet-4-5">claude-sonnet-4-5 (chat confiável)</option>
+        <option value="openai/gpt-4o">openai/gpt-4o</option>
+        <option value="__custom__">outro (digitar abaixo)</option>
+      </select>
+      <input type="text" id="model_primary" placeholder="anthropic/claude-opus-4-5"
+             value="{{ state.model_primary }}" style="width:300px; margin-top:6px">
+      <div class="hint">Valor atual: <span class="value-badge {% if state.model_primary %}set{% else %}empty{% endif %}">{{ state.model_primary or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>agents.defaults.model.fallback</label>
+    <div>
+      <input type="text" id="model_fallback" placeholder="ex: anthropic/claude-sonnet-4-5"
+             value="{{ state.model_fallback }}" style="width:300px">
+      <div class="hint">Valor atual: <span class="value-badge {% if state.model_fallback %}set{% else %}empty{% endif %}">{{ state.model_fallback or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-preview" onclick="previewSection('model', getModelChanges())">👁 Preview</button>
+    <button class="btn-apply"   onclick="applySection('model',   getModelChanges())">Aplicar</button>
+  </div>
+  <div class="diff-panel" id="diff-model"></div>
+</div>
+
+<!-- ============================================================ PLUGINS -->
+<div class="section" id="plugins-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="puzzle"></i></span>
+    <h2>Plugins</h2>
+  </div>
+  <p style="font-size:13px;color:var(--t3);margin:0 0 var(--sp2)">Controle quais plugins MCP o openclaw pode carregar. Chips verdes = permitidos, vermelhos = bloqueados.</p>
+
+  <div class="row">
+    <label>plugins.allow</label>
+    <div style="flex:1">
+      <div class="chip-group" id="plugins-allow-chips"></div>
+      <div class="chip-add-row">
+        <input type="text" id="plugins-allow-input" placeholder="ex: mcp-github" onkeydown="if(event.key==='Enter'){addChip('plugins-allow-input','plugins-allow-chips','allow');event.preventDefault()}">
+        <button class="btn-ghost" onclick="addChip('plugins-allow-input','plugins-allow-chips','allow')">+ Adicionar</button>
+      </div>
+      <div class="hint">Plugins explicitamente permitidos. Se vazio, todos os plugins são carregados.</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>plugins.deny</label>
+    <div style="flex:1">
+      <div class="chip-group" id="plugins-deny-chips"></div>
+      <div class="chip-add-row">
+        <input type="text" id="plugins-deny-input" placeholder="ex: mcp-dangerous" onkeydown="if(event.key==='Enter'){addChip('plugins-deny-input','plugins-deny-chips','deny');event.preventDefault()}">
+        <button class="btn-ghost" onclick="addChip('plugins-deny-input','plugins-deny-chips','deny')">+ Adicionar</button>
+      </div>
+      <div class="hint">Plugins explicitamente bloqueados, independente da lista allow.</div>
+    </div>
+  </div>
+
+  <div class="diff-panel" id="plugins-diff"></div>
+  <div class="actions">
+    <button class="btn-preview" onclick="previewPlugins()">Preview</button>
+    <button class="btn-apply"   onclick="applyPlugins()">Aplicar</button>
+  </div>
+</div>
+
+<!-- ============================================================ PERMISSIONS -->
+<div class="section" id="permissions-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="lock"></i></span>
+    <h2>7. Permissões de Arquivo</h2>
+  </div>
+
+  {% set perm_dir = state.permissions.dir %}
+  {% set perm_cfg = state.permissions.config %}
+
+  {% if perm_dir.na %}
+  <div class="perm-row" style="color:var(--t3);font-size:13px;padding:10px 0">
+    <span>Permissões Unix (chmod 700/600) não se aplicam ao Windows.</span>
+    <span style="color:var(--t4)">O acesso ao diretório é controlado pelo sistema de arquivos NTFS.</span>
+  </div>
+  {% else %}
+
+  <div class="perm-row">
+    <code>{{ perm_dir.path }}</code>
+    <span>(esperado: {{ perm_dir.expected }})</span>
+    {% if perm_dir.ok == True %}
+      <span class="perm-ok">{{ perm_dir.current }}</span>
+    {% elif perm_dir.ok == False %}
+      <span class="perm-warn">{{ perm_dir.current }} — inseguro</span>
+    {% else %}
+      <span class="perm-na">— não existe</span>
+    {% endif %}
+  </div>
+
+  <div class="perm-row">
+    <code>{{ perm_cfg.path }}</code>
+    <span>(esperado: {{ perm_cfg.expected }})</span>
+    {% if perm_cfg.ok == True %}
+      <span class="perm-ok">{{ perm_cfg.current }}</span>
+    {% elif perm_cfg.ok == False %}
+      <span class="perm-warn">{{ perm_cfg.current }} — inseguro</span>
+    {% else %}
+      <span class="perm-na">— não existe</span>
+    {% endif %}
+  </div>
+
+  <div class="actions" style="margin-top:12px">
+    <button class="btn-fix" onclick="applySection('permissions', {})">Corrigir Permissões</button>
+  </div>
+
+  {% endif %}
+</div>
+
+<!-- ============================================================ AUDIT -->
+<div class="section" id="audit-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="search"></i></span>
+    <h2>8. Security Audit</h2>
+  </div>
+  <div class="actions">
+    <button class="btn-audit" onclick="runAudit(false)">▶ Executar Audit</button>
+    <button class="btn-audit" onclick="runAudit(true)" style="background:#4c1d95">▶ Deep Audit (--deep)</button>
+  </div>
+  <pre id="audit-output"></pre>
+</div>
+
+<!-- ============================================================ CONFIG PREVIEW -->
+<div class="section" id="config-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="file-code"></i></span>
+    <h2>Config atual (JSON completo)</h2>
+  </div>
+  <div class="actions">
+    <button onclick="togglePreview()">Mostrar / Ocultar</button>
+    <button onclick="copyConfig()" style="background:#e5e7eb;color:#111">Copiar</button>
+  </div>
+  <pre id="config-preview"></pre>
+</div>
+
+<!-- ============================================================ NONO -->
+<div class="section" id="nono-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="server"></i></span>
+    <h2>9. nono — Sandbox a Nível de Kernel</h2>
+  </div>
+  <p style="font-size:13px;color:#555;margin:0 0 10px">
+    O nono usa <strong>Landlock</strong> (Linux ≥ 5.13) e <strong>Seatbelt</strong> (macOS) para enforcement
+    <em>irreversível</em> a nível de kernel. O agente inicia sem acesso a nada — você concede explicitamente
+    o que ele pode ler/escrever/conectar. Nem o próprio nono pode escapar depois de aplicado.
+  </p>
+
+  <!-- Status block — loaded via JS -->
+  <div id="nono-status" style="background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);padding:10px 14px;font-size:13px;margin-bottom:14px;color:var(--t2)">
+    <em>Carregando status...</em>
+  </div>
+
+  <!-- Profile -->
+  <div class="row">
+    <label>Modo de configuração</label>
+    <div>
+      <select id="nono_profile" onchange="toggleNonoCustom()">
+        <option value="openclaw">Perfil built-in openclaw (recomendado)</option>
+        <option value="custom">Personalizado</option>
+      </select>
+      <div class="hint">O perfil built-in já define os paths corretos para o OpenClaw</div>
+    </div>
+  </div>
+
+  <!-- Custom paths — shown only when profile=custom -->
+  <div id="nono-custom" style="display:none; border-left:3px solid #94a3b8; padding-left:14px; margin:10px 0">
+
+    <div class="row">
+      <label>Paths de leitura (--read)</label>
+      <div>
+        <input type="text" id="nono_read_paths"
+               placeholder="~/.openclaw/openclaw.json, ~/.openclaw/memory"
+               style="width:380px">
+        <div class="hint">Separado por vírgula. O agente pode ler esses paths.</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <label>Paths de escrita (--write)</label>
+      <div>
+        <input type="text" id="nono_write_paths"
+               placeholder="~/.openclaw/logs, ~/.openclaw/workspace"
+               style="width:380px">
+        <div class="hint">Separado por vírgula. O agente pode escrever nesses paths.</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <label>Rede</label>
+      <div>
+        <select id="nono_network" onchange="toggleNonoDomains()">
+          <option value="block">Bloquear toda rede (--net-block) — mais seguro</option>
+          <option value="allow">Permitir domínios específicos (--allow-host)</option>
+          <option value="open">Rede aberta (não recomendado) ⚠️</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="nono-domains" style="display:none" class="row">
+      <label>Domínios permitidos</label>
+      <div>
+        <input type="text" id="nono_allowed_domains"
+               placeholder="api.anthropic.com, api.openai.com"
+               style="width:380px">
+        <div class="hint">Separado por vírgula. Filtragem L7 por domínio.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Options -->
+  <div class="row">
+    <label>Atomic rollback (--rollback)</label>
+    <div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="nono_rollback" checked>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">Ativado</span>
+      </label>
+      <div class="hint">Snapshot do filesystem antes de cada sessão — reverte em caso de falha</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Modo detached (--detached)</label>
+    <div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="nono_detached">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">Ativado</span>
+      </label>
+      <div class="hint">Roda em background. Use <code>nono attach &lt;id&gt;</code> para reconectar.</div>
+    </div>
+  </div>
+
+  <div class="row" id="nono-systemd-row" style="display:none">
+    <label>Gerar unit systemd</label>
+    <div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="nono_systemd">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-label">Ativado</span>
+      </label>
+      <div class="hint">Gera um arquivo <code>.service</code> para iniciar o openclaw via nono no boot do sistema</div>
+    </div>
+  </div>
+
+  <!-- Preview do comando -->
+  <div style="margin-top:14px">
+    <div class="diff-title">Comando que será executado:</div>
+    <pre id="nono-cmd-preview" style="background:#0f172a;color:#7dd3fc;font-family:monospace;font-size:13px;
+         padding:12px 14px;border-radius:6px;margin:6px 0;white-space:pre-wrap">
+nono run --profile openclaw -- openclaw gateway</pre>
+  </div>
+
+  <div id="nono-systemd-preview" style="display:none;margin-top:10px">
+    <div class="diff-title">Unit systemd (salve em /etc/systemd/system/openclaw.service):</div>
+    <pre id="nono-systemd-content" style="background:#f8fafc;border:1px solid #e2e8f0;font-family:monospace;
+         font-size:12px;padding:12px;border-radius:6px;white-space:pre-wrap;max-height:280px;overflow-y:auto"></pre>
+  </div>
+
+  <div class="actions" style="margin-top:14px">
+    <button class="btn-preview" onclick="previewNonoCommand()">🔄 Atualizar preview</button>
+    <button class="btn-audit"   onclick="checkNonoSetup()">▶ nono setup --check-only</button>
+    <button onclick="checkNonoPs()" style="background:#e5e7eb;color:#111">nono ps</button>
+    <button onclick="copyNonoCmd()" style="background:#e5e7eb;color:#111">📋 Copiar comando</button>
+  </div>
+
+  <pre id="nono-check-output" style="background:#0f172a;color:#4ade80;font-family:monospace;font-size:13px;
+       padding:14px;border-radius:6px;white-space:pre-wrap;display:none;margin-top:12px;max-height:300px;overflow-y:auto"></pre>
+
+  <!-- Install instructions -->
+  <details style="margin-top:14px;font-size:13px">
+    <summary style="cursor:pointer;font-weight:600;color:var(--t1)">Como instalar o nono</summary>
+    <div style="margin-top:10px;line-height:2;color:var(--t2)">
+
+      <strong style="color:var(--t1)">Ubuntu / Debian:</strong><br>
+      <code style="background:var(--s3);padding:2px 6px;border-radius:3px">sudo apt update &amp;&amp; sudo apt install nono</code><br>
+      <span style="font-size:11px;color:var(--t3)">ou via snap: </span>
+      <code style="background:var(--s3);padding:2px 6px;border-radius:3px">sudo snap install nono</code><br><br>
+
+      <strong style="color:var(--t1)">Fedora / RHEL / openSUSE:</strong><br>
+      <code style="background:var(--s3);padding:2px 6px;border-radius:3px">sudo dnf install nono</code><br><br>
+
+      <strong style="color:var(--t1)">macOS:</strong><br>
+      <code style="background:var(--s3);padding:2px 6px;border-radius:3px">brew install nono</code><br><br>
+
+      <strong style="color:var(--t1)">Via Cargo (qualquer plataforma):</strong><br>
+      <code style="background:var(--s3);padding:2px 6px;border-radius:3px">cargo install nono</code><br><br>
+
+      <strong style="color:var(--t1)">Verificar suporte a Landlock (Linux ≥ 5.13):</strong><br>
+      <code style="background:var(--s3);padding:2px 6px;border-radius:3px">uname -r</code>
+      <span style="color:var(--t3);font-size:11px"> — kernel deve ser ≥ 5.13</span><br>
+      <code style="background:var(--s3);padding:2px 6px;border-radius:3px">nono setup --check-only</code><br><br>
+
+      <strong style="color:var(--t1)">Rodar o openclaw com perfil built-in:</strong><br>
+      <code style="background:var(--s3);padding:2px 6px;border-radius:3px">nono run --profile openclaw -- openclaw gateway</code><br><br>
+
+      <strong style="color:var(--t1)">Docs:</strong>
+      <a href="https://nono.sh/docs" target="_blank" style="color:var(--a-light)">nono.sh/docs</a> &nbsp;|&nbsp;
+      <a href="https://github.com/always-further/nono" target="_blank" style="color:var(--a-light)">github.com/always-further/nono</a>
+    </div>
+  </details>
+</div>
+
+<!-- ============================================================ CONFIG DIFF -->
+<div class="section" id="config-diff-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="git-compare"></i></span>
+    <h2>Config Diff</h2>
+  </div>
+  <p style="font-size:13px;color:var(--t3);margin:0 0 var(--sp2)">Compare duas versões da configuração lado a lado. Selecione um backup ou use a config atual.</p>
+
+  <div class="row">
+    <label>Config A</label>
+    <div>
+      <select id="diff-select-a" style="min-width:280px">
+        <option value="current">⚡ Configuração atual</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <label>Config B</label>
+    <div>
+      <select id="diff-select-b" style="min-width:280px">
+        <option value="current">⚡ Configuração atual</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-apply" onclick="runConfigDiff()">Comparar</button>
+    <button class="btn-ghost btn-refresh" onclick="loadDiffBackups()">Atualizar backups</button>
+  </div>
+
+  <div id="diff-result" style="display:none;margin-top:var(--sp3)">
+    <div class="diff-title" id="diff-summary" style="margin-bottom:var(--sp1)"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;margin-bottom:4px">
+      <div class="diff-grid-header" id="diff-header-a">A</div>
+      <div class="diff-grid-header" id="diff-header-b">B</div>
+    </div>
+    <div class="diff-grid" id="diff-table"></div>
+  </div>
+</div>
+
+<!-- ============================================================ BACKUPS -->
+<div class="section" id="backups-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="hard-drive"></i></span>
+    <h2>Backups</h2>
+  </div>
+  <button onclick="loadBackups()" style="background:#e5e7eb;color:#111">Carregar lista</button>
+  <div class="backup-list" id="backup-list" style="margin-top:10px"></div>
+</div>
+
+<!-- ============================================================ PROFILES -->
+<div class="section" id="profiles-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="layers"></i></span>
+    <h2>Perfis de Segurança</h2>
+    <button onclick="loadProfiles()" style="background:var(--s2);color:var(--t3);border:1px solid var(--b1);margin-left:auto;font-size:12px;padding:5px 10px;border-radius:var(--r2)">🔄 Atualizar</button>
+  </div>
+  <p class="hint" style="margin-bottom:var(--sp2)">Aplique um perfil pré-configurado de segurança. Cada perfil ajusta o conjunto de configurações recomendadas para o seu contexto de uso.</p>
+
+  <div class="cards-grid" id="profiles-grid" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">
+
+    <!-- Pessoal -->
+    <div class="profile-card" id="profile-card-personal">
+      <div class="profile-card-header">
+        <span class="profile-card-icon">🏠</span>
+        <span class="profile-card-title">Pessoal</span>
+      </div>
+      <div class="profile-card-desc">
+        Configurações balanceadas para uso individual.<br>
+        Segurança sólida sem comprometer a usabilidade.
+      </div>
+      <div class="profile-card-meta">
+        <span class="profile-changes-badge" id="profile-changes-personal">— mudanças</span>
+        <span class="profile-level-badge profile-level-medium">Médio</span>
+      </div>
+      <div class="profile-card-actions">
+        <button class="btn-preview" onclick="previewProfile('personal')">👁 Pré-visualizar</button>
+        <button class="btn-apply"   onclick="applyProfile('personal_preset')">Aplicar</button>
+      </div>
+      <div class="profile-diff-panel" id="profile-diff-personal"></div>
+    </div>
+
+    <!-- Equipe -->
+    <div class="profile-card" id="profile-card-team">
+      <div class="profile-card-header">
+        <span class="profile-card-icon">👥</span>
+        <span class="profile-card-title">Equipe</span>
+      </div>
+      <div class="profile-card-desc">
+        Configurações endurecidas para ambientes colaborativos.<br>
+        Restrições adicionais em canais e ferramentas compartilhadas.
+      </div>
+      <div class="profile-card-meta">
+        <span class="profile-changes-badge" id="profile-changes-team">— mudanças</span>
+        <span class="profile-level-badge profile-level-high">Alto</span>
+      </div>
+      <div class="profile-card-actions">
+        <button class="btn-preview" onclick="previewProfile('team')">👁 Pré-visualizar</button>
+        <button class="btn-apply"   onclick="applyProfile('team_preset')">Aplicar</button>
+      </div>
+      <div class="profile-diff-panel" id="profile-diff-team"></div>
+    </div>
+
+    <!-- Enterprise -->
+    <div class="profile-card" id="profile-card-enterprise">
+      <div class="profile-card-header">
+        <span class="profile-card-icon">🏢</span>
+        <span class="profile-card-title">Enterprise</span>
+      </div>
+      <div class="profile-card-desc">
+        Máxima segurança para ambientes corporativos.<br>
+        Conformidade estrita com políticas de segurança organizacional.
+      </div>
+      <div class="profile-card-meta">
+        <span class="profile-changes-badge" id="profile-changes-enterprise">— mudanças</span>
+        <span class="profile-level-badge profile-level-high" style="background:var(--red-dim);color:var(--red)">Máximo</span>
+      </div>
+      <div class="profile-card-actions">
+        <button class="btn-preview" onclick="previewProfile('enterprise')">👁 Pré-visualizar</button>
+        <button class="btn-apply"   onclick="applyProfile('enterprise_preset')">Aplicar</button>
+      </div>
+      <div class="profile-diff-panel" id="profile-diff-enterprise"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================ CHECKLIST -->
+<div class="section" id="checklist-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="clipboard-check"></i></span>
+    <h2>Checklist de Segurança</h2>
+    <button onclick="loadChecklist()" style="background:var(--s2);color:var(--t3);border:1px solid var(--b1);margin-left:auto;font-size:12px;padding:5px 10px;border-radius:var(--r2)">🔄 Atualizar</button>
+  </div>
+
+  <div class="checklist-summary-bar" id="checklist-summary-bar" style="display:none">
+    <div>
+      <div class="checklist-summary-label" id="checklist-summary-label">Carregando...</div>
+    </div>
+    <div class="checklist-progress">
+      <div class="checklist-progress-fill" id="checklist-progress-fill" style="width:0%;background:var(--green)"></div>
+    </div>
+    <div class="checklist-summary-pct" id="checklist-summary-pct">—</div>
+  </div>
+
+  <div id="checklist-body" style="color:var(--t3);font-size:13px;font-style:italic">Carregando checklist...</div>
+</div>
+
+</main>
+</div><!-- /.layout -->
+
+<div id="toast"></div>
+
+<script>
+// ---------------------------------------------------------- helpers
+function val(id) { return document.getElementById(id)?.value ?? ''; }
+function chk(id) { return document.getElementById(id)?.checked ?? false; }
+
+function markWarn(select, warnValue) {
+  select.className = select.value === warnValue ? 'warn' : '';
+}
+
+function syncModelInput() {
+  const sel = val('model_primary_select');
+  if (sel && sel !== '__custom__') document.getElementById('model_primary').value = sel;
+}
+
+// ---------------------------------------------------------- change collectors
+function getDmChanges() {
+  const c = {};
+  const wa = val('dm_whatsapp'); if (wa) c.whatsapp = wa;
+  const tg = val('dm_telegram'); if (tg) c.telegram = tg;
+  const dc = val('dm_discord');  if (dc) c.discord  = dc;
+  c.group_mention = chk('group_mention');
+  return c;
+}
+
+function getGatewayChanges() {
+  const c = {};
+  const bind = val('gateway_bind');      if (bind) c.bind = bind;
+  const port = val('gateway_port');      if (port) c.port = port;
+  const mode = val('gateway_auth_mode'); if (mode) c.auth_mode = mode;
+  const tok  = val('gateway_auth_token');if (tok)  c.auth_token = tok;
+  const mdns = val('mdns_mode');         if (mdns) c.mdns = mdns;
+  return c;
+}
+
+function getSandboxChanges() {
+  const c = {};
+  const mode = val('sandbox_mode');             if (mode) c.mode = mode;
+  const scope = val('sandbox_scope');           if (scope) c.scope = scope;
+  const wa = val('sandbox_workspace_access');   if (wa) c.workspace_access = wa;
+  return c;
+}
+
+function getToolsChanges() {
+  const c = {};
+  const profile = val('tools_profile');
+  const allow   = val('tools_allow').trim();
+  const deny    = val('tools_deny').trim();
+  if (profile) { c.profile = profile; }
+  else { if (allow) c.allow = allow; if (deny) c.deny = deny; }
+  // Elevated
+  const elevatedEl = document.getElementById('elevated_enabled');
+  if (elevatedEl) {
+    c.elevated_enabled = elevatedEl.checked;
+    c.elevated_allow_from = getChips('elevated-allowfrom-chips');
+  }
+  return c;
+}
+
+function toggleElevatedRow() {
+  const enabled = document.getElementById('elevated_enabled')?.checked;
+  const row = document.getElementById('elevated-allowfrom-row');
+  if (row) { row.style.opacity = enabled ? '1' : '0.4'; row.style.pointerEvents = enabled ? '' : 'none'; }
+}
+
+function getLoggingChanges() {
+  const c = {};
+  const level = val('log_level');          if (level) c.level = level;
+  const redact = val('log_redact');        if (redact) c.redact = redact;
+  const file = val('log_file').trim();     if (file) c.file = file;
+  const cl = val('log_console_level');     if (cl) c.console_level = cl;
+  const cs = val('log_console_style');     if (cs) c.console_style = cs;
+  return c;
+}
+
+function getModelChanges() {
+  const c = {};
+  const p = val('model_primary').trim();   if (p) c.primary = p;
+  const f = val('model_fallback').trim();  if (f) c.fallback = f;
+  return c;
+}
+
+// ---------------------------------------------------------- diff render
+function renderDiff(panelId, diff) {
+  const panel = document.getElementById('diff-' + panelId);
+  if (!panel) return;
+  panel.classList.add('visible');
+
+  if (!diff || diff.length === 0) {
+    panel.innerHTML = '<div class="diff-title">✅ Nenhuma mudança — já está correto.</div>';
+    return;
+  }
+
+  let html = '<div class="diff-title">Mudanças que serão aplicadas:</div>';
+  for (const d of diff) {
+    const before = d.before === undefined || d.before === null ? '<span class="diff-empty">não definido</span>' :
+                   `<span class="diff-before">${JSON.stringify(d.before)}</span>`;
+    const after  = `<span class="diff-after">${JSON.stringify(d.after)}</span>`;
+    html += `<div class="diff-row">
+      <span class="diff-path">${d.path}</span>
+      ${before}
+      <span class="diff-arrow">→</span>
+      ${after}
+    </div>`;
+  }
+  panel.innerHTML = html;
+}
+
+// ---------------------------------------------------------- toast
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show', 'error'), 4000);
+}
+
+// ---------------------------------------------------------- API calls
+async function previewSection(section, changes) {
+  const res = await fetch('/preview-change', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({section, changes})
+  });
+  const data = await res.json();
+  renderDiff(section, data.diff);
+}
+
+async function applySection(section, changes) {
+  const res = await fetch('/apply', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({section, changes})
+  });
+  const data = await res.json();
+
+  if (!data.success) {
+    showToast('❌ ' + (data.error || 'Erro desconhecido'), true);
+    return;
+  }
+
+  if (data.diff) renderDiff(section, data.diff);
+
+  if (data.applied && data.applied.length === 0) {
+    showToast('ℹ️ ' + (data.message || 'Nada mudou.'));
+  } else {
+    const count = (data.applied || []).length;
+    const backup = data.backup ? `  Backup: ${data.backup.split('/').pop()}` : '';
+    showToast(`✅ ${count} campo(s) atualizado(s).${backup}`);
+  }
+}
+
+function applyPreset() {
+  if (!confirm('Aplicar todas as configurações de segurança recomendadas?\nUm backup será feito automaticamente.')) return;
+  applySection('hardened_preset', {});
+}
+
+async function runAudit(deep) {
+  const out = document.getElementById('audit-output');
+  out.style.display = 'block';
+  out.textContent = 'Executando...';
+  const res = await fetch('/run-audit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({deep})
+  });
+  const data = await res.json();
+  out.textContent = data.output;
+}
+
+async function togglePreview() {
+  const el = document.getElementById('config-preview');
+  if (el.style.display === 'block') { el.style.display = 'none'; return; }
+  const res = await fetch('/config');
+  const data = await res.json();
+  el.textContent = JSON.stringify(data, null, 2);
+  el.style.display = 'block';
+}
+
+async function copyConfig() {
+  const res = await fetch('/config');
+  const data = await res.json();
+  navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+  showToast('📋 Config copiado para o clipboard');
+}
+
+async function loadBackups() {
+  const res = await fetch('/backups');
+  const data = await res.json();
+  const el = document.getElementById('backup-list');
+  if (!data.length) { el.innerHTML = '<em>Nenhum backup encontrado.</em>'; return; }
+  el.innerHTML = data.map(b => `
+    <div class="backup-item">
+      <code>${b.name}</code>
+      <button class="btn-restore" onclick="restoreBackup('${b.name}')">Restaurar</button>
+    </div>`).join('');
+}
+
+// ---------------------------------------------------------- nono
+function toggleNonoCustom() {
+  const isCustom = document.getElementById('nono_profile').value === 'custom';
+  document.getElementById('nono-custom').style.display = isCustom ? 'block' : 'none';
+  previewNonoCommand();
+}
+function toggleNonoDomains() {
+  const net = document.getElementById('nono_network').value;
+  document.getElementById('nono-domains').style.display = net === 'allow' ? 'flex' : 'none';
+  previewNonoCommand();
+}
+function getNonoOpts() {
+  const profile = val('nono_profile');
+  const opts = { profile, rollback: chk('nono_rollback'), detached: chk('nono_detached'), include_systemd: chk('nono_systemd') };
+  if (profile === 'custom') {
+    opts.read_paths  = val('nono_read_paths').split(',').map(s=>s.trim()).filter(Boolean);
+    opts.write_paths = val('nono_write_paths').split(',').map(s=>s.trim()).filter(Boolean);
+    opts.network     = val('nono_network');
+    opts.allowed_domains = val('nono_allowed_domains').split(',').map(s=>s.trim()).filter(Boolean);
+  }
+  return opts;
+}
+async function previewNonoCommand() {
+  const opts = getNonoOpts();
+  const res = await fetch('/nono/preview', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(opts) });
+  const data = await res.json();
+  document.getElementById('nono-cmd-preview').textContent = data.command;
+  const sysEl = document.getElementById('nono-systemd-preview');
+  if (data.systemd) { document.getElementById('nono-systemd-content').textContent = data.systemd; sysEl.style.display='block'; }
+  else sysEl.style.display='none';
+}
+async function checkNonoSetup() {
+  const out = document.getElementById('nono-check-output');
+  out.style.display='block'; out.textContent='Executando nono setup --check-only...';
+  const res = await fetch('/nono/install-check', {method:'POST'});
+  out.textContent = (await res.json()).output;
+}
+async function checkNonoPs() {
+  const out = document.getElementById('nono-check-output');
+  out.style.display='block'; out.textContent='Executando nono ps...';
+  const res = await fetch('/nono/run-check', {method:'POST'});
+  out.textContent = (await res.json()).output;
+}
+function copyNonoCmd() {
+  navigator.clipboard.writeText(document.getElementById('nono-cmd-preview').textContent);
+  showToast('📋 Comando copiado');
+}
+async function loadNonoStatus() {
+  const el = document.getElementById('nono-status');
+  const systemdRow = document.getElementById('nono-systemd-row');
+  try {
+    const d = await (await fetch('/nono/status')).json();
+
+    // Platform-aware install hint
+    let installHint = '';
+    if (!d.installed) {
+      if (d.platform === 'Linux') {
+        installHint = ' — <code>sudo apt install nono</code> ou <code>cargo install nono</code>';
+      } else if (d.platform === 'Darwin') {
+        installHint = ' — <code>brew install nono</code> ou <code>cargo install nono</code>';
+      } else {
+        installHint = ' — <code>cargo install nono</code>';
+      }
+    }
+
+    const installed = d.installed
+      ? `<span style="color:var(--green);font-weight:600">nono instalado</span> <span style="color:var(--t3);font-size:12px">${d.version || ''}</span>`
+      : `<span style="color:var(--amber);font-weight:600">nono não instalado</span>${installHint}`;
+
+    let kernelBadge = '';
+    if (d.platform === 'Linux') {
+      if (d.kernel_support === true) {
+        kernelBadge = `<span style="color:var(--green)">Landlock ativo (kernel ${d.kernel_version})</span>`;
+      } else if (d.kernel_support === false) {
+        kernelBadge = `<span style="color:var(--red)">kernel ${d.kernel_version} — Landlock requer ≥ 5.13</span>`;
+      } else {
+        kernelBadge = `<span style="color:var(--t3)">Linux — versão kernel desconhecida</span>`;
+      }
+    } else if (d.platform === 'Darwin') {
+      kernelBadge = `<span style="color:var(--green)">Seatbelt disponível (macOS)</span>`;
+    } else if (d.platform === 'Windows') {
+      kernelBadge = `<span style="color:var(--amber)">Windows — nono opera via WSL2 em modo limitado</span>`;
+    } else {
+      kernelBadge = `<span style="color:var(--t3)">${d.platform}</span>`;
+    }
+
+    el.innerHTML = `${installed} &nbsp;&nbsp; ${kernelBadge}`;
+
+    // systemd unit only makes sense on Linux
+    if (systemdRow) systemdRow.style.display = d.platform === 'Linux' ? '' : 'none';
+
+  } catch(e) { el.textContent = 'Erro ao verificar status do nono.'; }
+}
+loadNonoStatus();
+previewNonoCommand();
+['nono_rollback','nono_detached','nono_systemd'].forEach(id => {
+  const el = document.getElementById(id); if(el) el.addEventListener('change', previewNonoCommand);
+});
+['nono_read_paths','nono_write_paths','nono_allowed_domains'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', ()=>{ clearTimeout(el._t); el._t=setTimeout(previewNonoCommand,400); });
+});
+
+async function restoreBackup(name) {
+  if (!confirm(`Restaurar backup ${name}? O config atual será sobrescrito (e um novo backup feito).`)) return;
+  const res = await fetch('/restore/' + name, {method: 'POST'});
+  const data = await res.json();
+  if (data.success) { showToast('✅ Backup restaurado. Recarregando...'); setTimeout(() => location.reload(), 1500); }
+  else showToast('❌ ' + data.error, true);
+}
+</script>
+<script>
+// ── Section map: id → { icon, title } ───────────────────────
+const SECTION_META = {
+  'status-section':      { icon: 'shield',        title: 'Status de Segurança' },
+  'gw-errors-section':   { icon: 'alert-triangle', title: 'Erros do Gateway' },
+  'preset-section':      { icon: 'zap',            title: 'Preset de Segurança' },
+  'dm-section':          { icon: 'message-square', title: 'DM Pairing' },
+  'gateway-section':     { icon: 'globe',          title: 'Gateway' },
+  'sandbox-section':     { icon: 'box',            title: 'Sandbox (Docker)' },
+  'tools-section':       { icon: 'wrench',         title: 'Ferramentas' },
+  'logging-section':     { icon: 'file-text',      title: 'Audit Logging' },
+  'model-section':       { icon: 'cpu',            title: 'Modelo' },
+  'permissions-section': { icon: 'lock',           title: 'Permissões de Arquivo' },
+  'audit-section':       { icon: 'search',         title: 'Security Audit' },
+  'nono-section':        { icon: 'server',         title: 'nono — Sandbox de Kernel' },
+  'plugins-section':     { icon: 'puzzle',          title: 'Plugins' },
+  'config-section':      { icon: 'file-code',      title: 'Config JSON Completo' },
+  'config-diff-section': { icon: 'git-compare',    title: 'Config Diff' },
+  'backups-section':     { icon: 'hard-drive',     title: 'Backups' },
+};
+
+// ── Show a single section ────────────────────────────────────
+function showSection(id) {
+  // hide all
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  // show target
+  const target = document.getElementById(id);
+  if (target) target.classList.add('active');
+
+  // update sidebar active link
+  document.querySelectorAll('.sidebar-nav a').forEach(a => {
+    a.classList.toggle('active', a.dataset.section === id);
+  });
+
+  // update page header
+  const meta = SECTION_META[id] || {};
+  const title = document.getElementById('page-header-title');
+  if (title) title.textContent = meta.title || id;
+  const iconEl = document.getElementById('page-header-lucide');
+  if (iconEl && meta.icon) {
+    iconEl.setAttribute('data-lucide', meta.icon);
+    lucide.createIcons({ nodes: [iconEl.parentElement] });
+  }
+
+  // close mobile menu if open
+  closeMobileMenu();
+
+  // persist selection
+  try { sessionStorage.setItem('oc_section', id); } catch(_) {}
+}
+
+// ── Sidebar collapse ─────────────────────────────────────────
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  const btn = sidebar.querySelector('.sidebar-toggle i');
+  if (btn) {
+    btn.setAttribute('data-lucide', collapsed ? 'panel-left-open' : 'panel-left-close');
+    lucide.createIcons({ nodes: [btn.parentElement] });
+  }
+  try { sessionStorage.setItem('oc_sidebar', collapsed ? '1' : '0'); } catch(_) {}
+}
+
+// ── Mobile menu ──────────────────────────────────────────────
+function openMobileMenu() {
+  document.getElementById('sidebar').classList.add('mobile-open');
+  document.getElementById('mobile-overlay').classList.add('visible');
+}
+function closeMobileMenu() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('mobile-overlay').classList.remove('visible');
+}
+
+// ── Chip system ───────────────────────────────────────────────
+// _chipData[containerId] = string[]
+const _chipData = {};
+
+function initChips(containerId, initialArr, variant) {
+  _chipData[containerId] = [...(initialArr || [])];
+  _renderChips(containerId, variant);
+}
+
+function _renderChips(containerId, variant) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const v = variant || el.dataset.variant || 'neutral';
+  el.dataset.variant = v;
+  el.innerHTML = _chipData[containerId].map((item, i) =>
+    `<span class="chip chip-${v}">${item}<span class="chip-remove" onclick="_removeChip('${containerId}',${i})" title="Remover">×</span></span>`
+  ).join('');
+}
+
+function _removeChip(containerId, idx) {
+  _chipData[containerId].splice(idx, 1);
+  _renderChips(containerId, document.getElementById(containerId)?.dataset.variant);
+}
+
+function addChip(inputId, containerId, variant) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const raw = input.value.trim();
+  if (!raw) return;
+  if (!_chipData[containerId]) _chipData[containerId] = [];
+  // support comma-separated paste
+  raw.split(',').map(s => s.trim()).filter(Boolean).forEach(v => {
+    if (!_chipData[containerId].includes(v)) _chipData[containerId].push(v);
+  });
+  input.value = '';
+  _renderChips(containerId, variant);
+}
+
+function getChips(containerId) {
+  return _chipData[containerId] || [];
+}
+
+// ── Plugins section ───────────────────────────────────────────
+function initPluginsSection() {
+  initChips('plugins-allow-chips', {{ state.plugins_allow | tojson }}, 'allow');
+  initChips('plugins-deny-chips',  {{ state.plugins_deny  | tojson }}, 'deny');
+}
+
+function getPluginsPayload() {
+  return { allow: getChips('plugins-allow-chips'), deny: getChips('plugins-deny-chips') };
+}
+
+async function previewPlugins() {
+  await previewSection('plugins', getPluginsPayload());
+  const panel = document.getElementById('plugins-diff');
+  if (panel) panel.classList.add('visible');
+}
+
+async function applyPlugins() {
+  await applySection('plugins', getPluginsPayload());
+}
+
+// ── Config Diff section ───────────────────────────────────────
+async function loadDiffBackups() {
+  const backups = await (await fetch('/backups')).json();
+  ['diff-select-a','diff-select-b'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const current = sel.value;
+    // keep only the "current" option then repopulate
+    sel.innerHTML = '<option value="current">⚡ Configuração atual</option>';
+    backups.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.name;
+      opt.textContent = '📁 ' + b.name;
+      sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+  });
+}
+
+async function runConfigDiff() {
+  const a = document.getElementById('diff-select-a')?.value || 'current';
+  const b = document.getElementById('diff-select-b')?.value || 'current';
+  const res = await fetch(`/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+  const data = await res.json();
+  const result = document.getElementById('diff-result');
+  const summary = document.getElementById('diff-summary');
+  const table   = document.getElementById('diff-table');
+  const ha = document.getElementById('diff-header-a');
+  const hb = document.getElementById('diff-header-b');
+  if (!result) return;
+  if (data.error) { showToast(data.error, true); return; }
+  result.style.display = 'block';
+  if (ha) ha.textContent = a === 'current' ? '⚡ Atual' : a;
+  if (hb) hb.textContent = b === 'current' ? '⚡ Atual' : b;
+  if (summary) {
+    summary.textContent = data.total === 0
+      ? 'Configurações idênticas — nenhuma diferença encontrada.'
+      : `${data.total} diferença${data.total > 1 ? 's' : ''} encontrada${data.total > 1 ? 's' : ''}`;
+  }
+  if (table) {
+    if (data.total === 0) {
+      table.innerHTML = '<div class="diff-cell same" style="grid-column:1/-1;opacity:.6">✓ Idênticas</div>';
+    } else {
+      table.innerHTML = data.diff.map(d =>
+        `<div class="diff-cell removed"><span style="opacity:.5;font-size:10px">${d.path}</span><br>${JSON.stringify(d.before)}</div>` +
+        `<div class="diff-cell added"><span style="opacity:.5;font-size:10px">${d.path}</span><br>${JSON.stringify(d.after)}</div>`
+      ).join('');
+    }
+  }
+}
+
+// ── Theme ─────────────────────────────────────────────────────
+function toggleTheme() {
+  const html    = document.documentElement;
+  const isDark  = html.getAttribute('data-theme') !== 'light';
+  const next    = isDark ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  try { localStorage.setItem('oc_theme', next); } catch(_) {}
+  _applyThemeIcon(next);
+}
+
+function _applyThemeIcon(theme) {
+  const icon  = document.getElementById('theme-icon');
+  const label = document.getElementById('theme-label');
+  if (!icon) return;
+  const isDark = theme !== 'light';
+  icon.setAttribute('data-lucide', isDark ? 'sun' : 'moon');
+  if (label) label.textContent = isDark ? 'Tema claro' : 'Tema escuro';
+  lucide.createIcons({ nodes: [icon.parentElement] });
+}
+
+// ── Init ─────────────────────────────────────────────────────
+(function init() {
+  // restore theme (prefer localStorage, fallback to OS preference)
+  let savedTheme;
+  try { savedTheme = localStorage.getItem('oc_theme'); } catch(_) {}
+  if (!savedTheme) {
+    savedTheme = 'light'; // DashStack default: light content, always-dark sidebar
+  }
+  document.documentElement.setAttribute('data-theme', savedTheme);
+
+  // restore sidebar state
+  try {
+    if (sessionStorage.getItem('oc_sidebar') === '1') {
+      document.getElementById('sidebar').classList.add('collapsed');
+      document.body.classList.add('sidebar-collapsed');
+    }
+  } catch(_) {}
+
+  // restore or default to first section
+  let saved = null;
+  try { saved = sessionStorage.getItem('oc_section'); } catch(_) {}
+  showSection(saved && document.getElementById(saved) ? saved : 'status-section');
+
+  lucide.createIcons();
+  // Set correct theme icon after icons are hydrated
+  _applyThemeIcon(savedTheme);
+
+  // Init chip groups
+  initPluginsSection();
+  initChips('elevated-allowfrom-chips',
+    {{ (state.elevated_allow_from.split(', ') if state.elevated_allow_from else []) | tojson }},
+    'neutral');
+
+  // Pre-load backup list for Config Diff selects
+  loadDiffBackups();
+})();
+</script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</body>
+</html>
