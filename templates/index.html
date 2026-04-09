@@ -2405,6 +2405,9 @@ function _applyThemeIcon(theme) {
 }
 
 // ── Init ─────────────────────────────────────────────────────
+// ── User selector state (must be before IIFE) ──────────────────
+let _userMenuOpen = false;
+
 (function init() {
   // restore theme (prefer localStorage, fallback to OS preference)
   let savedTheme;
@@ -2445,8 +2448,6 @@ function _applyThemeIcon(theme) {
 })();
 
 // ── User selector ──────────────────────────────────────────────
-let _userMenuOpen = false;
-
 async function loadUserSelector() {
   const label = document.getElementById('user-selector-label');
   try {
