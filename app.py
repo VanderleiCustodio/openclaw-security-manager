@@ -436,6 +436,7 @@ def _patch_personal_preset(current: dict) -> dict:
             }
         },
         "tools": {
+            "profile": "standard",
             "allow": [
                 "Read(**)",
                 "Edit(~/projetos/**)",
@@ -465,6 +466,8 @@ def _patch_personal_preset(current: dict) -> dict:
                 "WebFetch(*)",
             ],
         },
+        "plugins": {"deny": []},
+        "session": {"dmScope": "contacts"},
         "logging": {
             "level": "info",
             "redactSensitive": "tools",
@@ -503,6 +506,7 @@ def _patch_team_preset(current: dict) -> dict:
             }
         },
         "tools": {
+            "profile": "restricted",
             "allow": [
                 "Read(**)",
                 "Edit(src/**)",
@@ -539,6 +543,7 @@ def _patch_team_preset(current: dict) -> dict:
             "allow": [],
             "deny": ["*"],
         },
+        "session": {"dmScope": "contacts"},
         "logging": {
             "level": "info",
             "redactSensitive": "all",
@@ -580,6 +585,7 @@ def _patch_enterprise_preset(current: dict) -> dict:
             }
         },
         "tools": {
+            "profile": "minimal",
             "deny": [
                 "Bash(sudo *)",
                 "Bash(chmod *)",
@@ -615,10 +621,11 @@ def _patch_enterprise_preset(current: dict) -> dict:
             "allow": [],
             "deny": ["*"],
         },
+        "session": {"dmScope": "none"},
         "logging": {
-            "level": "info",
+            "level": "warn",
             "redactSensitive": "all",
-            "consoleLevel": "warn",
+            "consoleLevel": "error",
         },
     }
 
@@ -649,6 +656,7 @@ def _patch_devops_preset(current: dict) -> dict:
             }
         },
         "tools": {
+            "profile": "restricted",
             "allow": [
                 "Read(**)",
                 "Edit(src/**)", "Edit(tests/**)", "Edit(.github/**)",
@@ -695,6 +703,8 @@ def _patch_devops_preset(current: dict) -> dict:
                 "Read(**/*.pem)", "Read(**/*.key)",
             ],
         },
+        "plugins": {"deny": []},
+        "session": {"dmScope": "contacts"},
         "logging": {
             "level": "info",
             "redactSensitive": "tools",
@@ -878,6 +888,11 @@ RECOMMENDED = {
     "tools_deny_env_files": ("Deny Read(.env files)", "tools.deny",                              "<set>",               [], "high"),
     "tools_deny_secrets":   ("Deny Read(.aws/.ssh)",   "tools.deny",                              "<set>",               [], "critical"),
     "elevated_disabled": ("Elevated tools desabilitado", "agents.defaults.tools.elevated.enabled", "false",             ["false", "False"], "high"),
+    # Missing checks from security guide
+    "tools_profile":    ("Tools profile",               "tools.profile",          "restricted",  ["restricted", "minimal"], "high"),
+    "plugins_deny":     ("Plugins bloqueados",           "plugins.deny",           "<non-empty>", [],                       "high"),
+    "log_console_level":("Log consoleLevel",             "logging.consoleLevel",   "warn",        ["warn", "error"],        "low"),
+    "dm_scope":         ("DM scope (session)",           "session.dmScope",        "contacts",    ["contacts", "none"],     "medium"),
 }
 
 RISK_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -921,6 +936,11 @@ def build_status(cfg: dict) -> list:
         "tools_deny_env_files": "<set>" if _tools_deny_contains(cfg, ".env") else "",
         "tools_deny_secrets":   "<set>" if _tools_deny_contains(cfg, ".aws", ".ssh") else "",
         "elevated_disabled":    "false" if elevated_enabled is False else (str(elevated_enabled).lower() if elevated_enabled is not None else ""),
+        # New missing checks
+        "tools_profile":     str(_get(cfg, "tools", "profile", default="")),
+        "plugins_deny":      "<non-empty>" if (_get(cfg, "plugins", "deny", default=[]) or []) else "",
+        "log_console_level": str(_get(cfg, "logging", "consoleLevel", default="")),
+        "dm_scope":          str(_get(cfg, "session", "dmScope", default="")),
     }
 
     rows = []
@@ -930,6 +950,8 @@ def build_status(cfg: dict) -> list:
         if key in ("gateway_token", "tools_deny_sudo", "tools_deny_curl",
                    "tools_deny_env", "tools_deny_env_files", "tools_deny_secrets"):
             ok = current == "<set>"
+        elif key == "plugins_deny":
+            ok = current == "<non-empty>"
         elif key in ("perm_dir", "perm_cfg") and current == "N/A":
             ok = True  # Windows: chmod not applicable, not a security gap
         elif safe_vals:
@@ -1549,6 +1571,46 @@ def nono_run_check():
     return jsonify({"output": output})
 
 
+PROFILE_META = {
+    "personal": {
+        "tagline": "Desenvolvedor individual — usabilidade com segurança básica",
+        "use_case": "Projetos pessoais, home office, desenvolvimento local",
+        "tools_enabled": ["Git (status/diff/add/commit/log)", "npm test / npm run / npx", "Leitura de todos os arquivos", "Edição em ~/projetos/**"],
+        "tools_restricted": ["sudo", "rm -rf", "curl / wget", "SSH", "npm install / pip install", "Arquivos .env / .aws / .ssh"],
+        "highlights": ["DM por pairing em todos os canais", "Sandbox non-main / session", "Ferramentas elevadas desabilitadas", "tools.profile: standard"],
+        "channels": "pairing",
+        "sandbox": "non-main / session",
+    },
+    "team": {
+        "tagline": "Servidor compartilhado — restrições para ambientes multi-usuário",
+        "use_case": "Repositórios compartilhados, CI/CD interno, squads de desenvolvimento",
+        "tools_enabled": ["Git (sem push/force)", "npm test / build / lint", "Leitura restrita de código"],
+        "tools_restricted": ["sudo / rm", "curl / wget / SSH / SCP / NC", "npm install", "git push / git reset --hard", "Agent(*)", "WebFetch(*)"],
+        "highlights": ["DM por allowlist", "Todos os plugins bloqueados", "Sandbox all / agent", "tools.profile: restricted", "Logs totalmente redatados"],
+        "channels": "allowlist",
+        "sandbox": "all / agent",
+    },
+    "enterprise": {
+        "tagline": "Produção — conformidade máxima e controle total",
+        "use_case": "Ambientes regulados, compliance, IT corporativo, produção",
+        "tools_enabled": ["Apenas operações essenciais de leitura"],
+        "tools_restricted": ["sudo / chmod / chown", "curl / wget / SSH / SCP / NC / nmap", "npm install / pip install", "Write em /etc /usr /bin /.ssh /.aws /.gnupg", ".env / credentials / secrets / *.pem / *.key", "WebFetch(*) / Agent(*)"],
+        "highlights": ["DM scope: none", "tools.profile: minimal", "Plugins bloqueados", "Sandbox all / agent", "Log level: warn — consoleLevel: error"],
+        "channels": "allowlist",
+        "sandbox": "all / agent",
+    },
+    "devops": {
+        "tagline": "CI/CD e infraestrutura — acesso controlado a ferramentas DevOps",
+        "use_case": "GitHub, GitLab, MongoDB, Azure DevOps, Docker, Kubernetes, Terraform",
+        "tools_enabled": ["Git completo (fetch/pull/checkout/branch)", "GitHub CLI — gh pr / issue / run / workflow", "GitLab CLI — glab mr / issue / ci", "Docker ps / logs (somente leitura)", "kubectl get / describe / logs (somente leitura)", "mongosh --eval", "terraform plan / validate / fmt", "az devops / az pipelines", "npm / pytest"],
+        "tools_restricted": ["docker run / docker exec", "kubectl delete / kubectl exec", "terraform apply / destroy", "git push --force / push para main", "az login", "curl / wget / SSH", "npm install / pip install", "Credenciais / secrets / .pem / .key"],
+        "highlights": ["tools.profile: restricted", "CI/CD read-only", "Infra somente leitura", "DM por pairing", "Sandbox non-main / session"],
+        "channels": "pairing",
+        "sandbox": "non-main / session",
+    },
+}
+
+
 @app.route("/profiles")
 @login_required
 def profiles():
@@ -1563,7 +1625,12 @@ def profiles():
         patch = build_patch(builder_key, {}, cfg)
         after = deep_merge(cfg, patch)
         diff = compute_diff(cfg, after)
-        result[name] = {"diff": diff, "change_count": len(diff), "config": after}
+        result[name] = {
+            "diff": diff,
+            "change_count": len(diff),
+            "config": after,
+            "meta": PROFILE_META.get(name, {}),
+        }
     return jsonify(result)
 
 

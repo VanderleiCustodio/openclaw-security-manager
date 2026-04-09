@@ -542,6 +542,12 @@
     .profile-card-desc {
       font-size: 12px; color: var(--t3); line-height: 1.55;
     }
+    .profile-tagline { font-size: 12px; color: var(--t2); font-weight: 600; margin-bottom: 2px; }
+    .profile-usecase { font-size: 11px; color: var(--t3); margin-bottom: 6px; }
+    .profile-tools-section { margin-top: 6px; }
+    .profile-tools-label { font-size: 10px; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+    .profile-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .tool-chip { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 500; white-space: nowrap; }
     .profile-card-meta {
       display: flex; align-items: center; gap: var(--sp1); flex-wrap: wrap; margin: 4px 0;
     }
@@ -1762,9 +1768,8 @@ nono run --profile openclaw -- openclaw gateway</pre>
         <span class="profile-card-icon">🏠</span>
         <span class="profile-card-title">Pessoal</span>
       </div>
-      <div class="profile-card-desc">
-        Configurações balanceadas para uso individual.<br>
-        Segurança sólida sem comprometer a usabilidade.
+      <div class="profile-card-desc" id="profile-desc-personal">
+        Configurações balanceadas para uso individual.
       </div>
       <div class="profile-card-meta">
         <span class="profile-changes-badge" id="profile-changes-personal">— mudanças</span>
@@ -1783,9 +1788,8 @@ nono run --profile openclaw -- openclaw gateway</pre>
         <span class="profile-card-icon">👥</span>
         <span class="profile-card-title">Equipe</span>
       </div>
-      <div class="profile-card-desc">
-        Configurações endurecidas para ambientes colaborativos.<br>
-        Restrições adicionais em canais e ferramentas compartilhadas.
+      <div class="profile-card-desc" id="profile-desc-team">
+        Configurações endurecidas para ambientes colaborativos.
       </div>
       <div class="profile-card-meta">
         <span class="profile-changes-badge" id="profile-changes-team">— mudanças</span>
@@ -1804,9 +1808,8 @@ nono run --profile openclaw -- openclaw gateway</pre>
         <span class="profile-card-icon">🏢</span>
         <span class="profile-card-title">Enterprise</span>
       </div>
-      <div class="profile-card-desc">
-        Máxima segurança para ambientes corporativos.<br>
-        Conformidade estrita com políticas de segurança organizacional.
+      <div class="profile-card-desc" id="profile-desc-enterprise">
+        Máxima segurança para ambientes corporativos.
       </div>
       <div class="profile-card-meta">
         <span class="profile-changes-badge" id="profile-changes-enterprise">— mudanças</span>
@@ -1825,9 +1828,8 @@ nono run --profile openclaw -- openclaw gateway</pre>
         <span class="profile-card-icon">⚙️</span>
         <span class="profile-card-title">DevOps</span>
       </div>
-      <div class="profile-card-desc">
-        Perfil para desenvolvedores com GitHub, GitLab, MongoDB, Azure DevOps, Docker e Kubernetes.<br>
-        Balanceia produtividade com segurança — acesso controlado a CI/CD e infraestrutura.
+      <div class="profile-card-desc" id="profile-desc-devops">
+        CI/CD e infraestrutura com acesso controlado.
       </div>
       <div class="profile-card-meta">
         <span class="profile-changes-badge" id="profile-changes-devops">— mudanças</span>
@@ -2027,6 +2029,15 @@ function applyPreset() {
 }
 
 // ---------------------------------------------------------- profiles
+function _renderToolChips(list, type) {
+  if (!list || !list.length) return '';
+  const color = type === 'allow'
+    ? 'background:var(--green-dim,#0d2b1a);color:var(--green,#4ade80)'
+    : 'background:var(--red-dim,#2b0d0d);color:var(--red,#f87171)';
+  const icon = type === 'allow' ? '✓' : '✕';
+  return list.map(t => `<span class="tool-chip" style="${color}">${icon} ${t}</span>`).join('');
+}
+
 async function loadProfiles() {
   try {
     const res = await fetch('/profiles');
@@ -2035,6 +2046,30 @@ async function loadProfiles() {
     for (const [name, info] of Object.entries(data)) {
       const badge = document.getElementById('profile-changes-' + name);
       if (badge) badge.textContent = info.change_count + ' mudança(s)';
+
+      const meta = info.meta || {};
+      const descEl = document.getElementById('profile-desc-' + name);
+      if (descEl && meta.tagline) {
+        descEl.innerHTML = `
+          <div class="profile-tagline">${meta.tagline}</div>
+          <div class="profile-usecase">📍 ${meta.use_case || ''}</div>
+          ${meta.tools_enabled && meta.tools_enabled.length ? `
+          <div class="profile-tools-section">
+            <div class="profile-tools-label">Ferramentas habilitadas</div>
+            <div class="profile-chips">${_renderToolChips(meta.tools_enabled, 'allow')}</div>
+          </div>` : ''}
+          ${meta.tools_restricted && meta.tools_restricted.length ? `
+          <div class="profile-tools-section">
+            <div class="profile-tools-label">Bloqueadas / Restritas</div>
+            <div class="profile-chips">${_renderToolChips(meta.tools_restricted, 'deny')}</div>
+          </div>` : ''}
+          ${meta.highlights && meta.highlights.length ? `
+          <div class="profile-tools-section">
+            <div class="profile-tools-label">Destaques</div>
+            <div class="profile-chips">${meta.highlights.map(h => `<span class="tool-chip" style="background:var(--s3,#1a2030);color:var(--t2)">• ${h}</span>`).join('')}</div>
+          </div>` : ''}
+        `;
+      }
     }
   } catch(e) {
     showToast('❌ Erro ao carregar perfis', true);
