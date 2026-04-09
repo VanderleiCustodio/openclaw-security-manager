@@ -110,31 +110,19 @@ def discover_user_configs() -> list:
                     pass
             candidates.append(("root", Path("/root/.openclaw/openclaw.json")))
         for username, cfg in candidates:
-            # Check if we can access the parent directory at all
             home_dir = cfg.parent.parent  # /home/username or /root
-            home_accessible = os.access(home_dir, os.X_OK)
-            if not home_accessible:
-                # User's home dir is not accessible — still show it as locked
+            try:
+                home_accessible = os.access(home_dir, os.X_OK)
+                exists = cfg.exists() if home_accessible else False
+                locked = not home_accessible
                 found.append({
                     "user": username,
                     "path": str(cfg),
-                    "readable": False,
-                    "writable": False,
-                    "exists": None,  # unknown
-                    "locked": True,
+                    "readable": os.access(cfg, os.R_OK) if exists else False,
+                    "writable": os.access(cfg, os.W_OK) if exists else False,
+                    "exists": exists if home_accessible else None,
+                    "locked": locked,
                 })
-                continue
-            try:
-                exists = cfg.exists()
-                if exists or cfg.parent.exists():
-                    found.append({
-                        "user": username,
-                        "path": str(cfg),
-                        "readable": os.access(cfg, os.R_OK) if exists else False,
-                        "writable": os.access(cfg, os.W_OK) if exists else False,
-                        "exists": exists,
-                        "locked": False,
-                    })
             except PermissionError:
                 found.append({
                     "user": username,
