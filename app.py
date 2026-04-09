@@ -4,8 +4,14 @@ import os
 import shutil
 import stat
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
+
+try:
+    import psutil as _psutil
+except ImportError:
+    _psutil = None
 
 import re
 
@@ -77,6 +83,7 @@ def detect_config_path() -> Path:
 CONFIG_PATH = detect_config_path()
 OPENCLAW_DIR = CONFIG_PATH.parent
 BACKUP_DIR = OPENCLAW_DIR / "backups"
+PAIRINGS_PATH = OPENCLAW_DIR / "pairings.json"
 
 
 # ---------------------------------------------------------------------------
@@ -1833,6 +1840,151 @@ def checklist():
         "pending": total - done_count,
         "score_pct": round(done_count / total * 100) if total else 0,
     })
+
+
+# ---------------------------------------------------------------------------
+# System metrics
+# ---------------------------------------------------------------------------
+
+def _get_metrics_linux() -> dict:
+    """Read metrics from /proc on Linux without psutil."""
+    metrics = {}
+    try:
+        with open("/proc/meminfo") as f:
+            mem = {line.split(":")[0].strip(): int(line.split(":")[1].strip().split()[0])
+                   for line in f if ":" in line}
+        total = mem.get("MemTotal", 0)
+        avail = mem.get("MemAvailable", 0)
+        used  = total - avail
+        metrics["ram_total_mb"] = round(total / 1024)
+        metrics["ram_used_mb"]  = round(used  / 1024)
+        metrics["ram_pct"]      = round(used / total * 100) if total else 0
+    except Exception:
+        pass
+    try:
+        with open("/proc/loadavg") as f:
+            parts = f.read().split()
+        metrics["load_1m"]  = float(parts[0])
+        metrics["load_5m"]  = float(parts[1])
+        metrics["load_15m"] = float(parts[2])
+        metrics["procs"]    = parts[3]
+    except Exception:
+        pass
+    try:
+        out = subprocess.run(["df", "-BM", "/"], capture_output=True, text=True, timeout=5)
+        parts = out.stdout.strip().splitlines()[-1].split()
+        metrics["disk_total_gb"] = round(int(parts[1].rstrip("M")) / 1024, 1)
+        metrics["disk_used_gb"]  = round(int(parts[2].rstrip("M")) / 1024, 1)
+        metrics["disk_pct"]      = int(parts[4].rstrip("%"))
+    except Exception:
+        pass
+    try:
+        with open("/proc/uptime") as f:
+            secs = float(f.read().split()[0])
+        days, rem = divmod(int(secs), 86400)
+        hrs, rem  = divmod(rem, 3600)
+        mins      = rem // 60
+        metrics["uptime"] = f"{days}d {hrs}h {mins}m" if days else f"{hrs}h {mins}m"
+    except Exception:
+        pass
+    return metrics
+
+
+@app.route("/api/metrics")
+@login_required
+def api_metrics():
+    if _psutil:
+        try:
+            vm   = _psutil.virtual_memory()
+            disk = _psutil.disk_usage("/")
+            cpu  = _psutil.cpu_percent(interval=0.3)
+            boot = _psutil.boot_time()
+            secs = time.time() - boot
+            days, rem = divmod(int(secs), 86400)
+            hrs, rem  = divmod(rem, 3600)
+            mins      = rem // 60
+            return jsonify({
+                "ram_total_mb": round(vm.total / 1024 / 1024),
+                "ram_used_mb":  round(vm.used  / 1024 / 1024),
+                "ram_pct":      vm.percent,
+                "cpu_pct":      cpu,
+                "disk_total_gb": round(disk.total / 1024**3, 1),
+                "disk_used_gb":  round(disk.used  / 1024**3, 1),
+                "disk_pct":      disk.percent,
+                "uptime": f"{days}d {hrs}h {mins}m" if days else f"{hrs}h {mins}m",
+                "source": "psutil",
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    # fallback: Linux /proc
+    import platform
+    if platform.system() == "Linux":
+        m = _get_metrics_linux()
+        m["source"] = "proc"
+        return jsonify(m)
+    return jsonify({"error": "psutil não instalado e plataforma não suportada para fallback"}), 501
+
+
+# ---------------------------------------------------------------------------
+# Pairing approvals
+# ---------------------------------------------------------------------------
+
+def _load_pairings() -> dict:
+    if PAIRINGS_PATH.exists():
+        try:
+            with open(PAIRINGS_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"pending": [], "approved": [], "blocked": []}
+
+
+def _save_pairings(data: dict):
+    PAIRINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(PAIRINGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+@app.route("/api/pairings")
+@login_required
+def api_pairings():
+    return jsonify(_load_pairings())
+
+
+@app.route("/api/pairings/approve", methods=["POST"])
+@login_required
+def api_pairings_approve():
+    req = request.json or {}
+    pairing_id = req.get("id")
+    if not pairing_id:
+        return jsonify({"error": "id obrigatório"}), 400
+    data = _load_pairings()
+    target = next((p for p in data["pending"] if p.get("id") == pairing_id), None)
+    if not target:
+        return jsonify({"error": "pairing não encontrado"}), 404
+    data["pending"].remove(target)
+    target["approved_at"] = datetime.utcnow().isoformat() + "Z"
+    data["approved"].append(target)
+    _save_pairings(data)
+    return jsonify({"ok": True, "pairing": target})
+
+
+@app.route("/api/pairings/reject", methods=["POST"])
+@login_required
+def api_pairings_reject():
+    req = request.json or {}
+    pairing_id = req.get("id")
+    if not pairing_id:
+        return jsonify({"error": "id obrigatório"}), 400
+    data = _load_pairings()
+    target = next((p for p in data["pending"] if p.get("id") == pairing_id), None)
+    if not target:
+        return jsonify({"error": "pairing não encontrado"}), 404
+    data["pending"].remove(target)
+    target["rejected_at"] = datetime.utcnow().isoformat() + "Z"
+    data["blocked"].append(target)
+    _save_pairings(data)
+    return jsonify({"ok": True, "pairing": target})
 
 
 if __name__ == "__main__":

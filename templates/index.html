@@ -725,6 +725,15 @@
         <span class="nav-icon"><i data-lucide="layers"></i></span>
         <span class="nav-label">Perfis de Segurança</span>
       </a>
+      <a class="nav-item" onclick="showSection('pairings-section')" data-section="pairings-section">
+        <span class="nav-icon"><i data-lucide="user-check"></i></span>
+        <span class="nav-label">Aprovações</span>
+        <span class="nav-badge" id="pairings-nav-badge" style="display:none"></span>
+      </a>
+      <a class="nav-item" onclick="showSection('metrics-section')" data-section="metrics-section">
+        <span class="nav-icon"><i data-lucide="activity"></i></span>
+        <span class="nav-label">Métricas do Sistema</span>
+      </a>
       <a class="nav-item" onclick="showSection('checklist-section')" data-section="checklist-section">
         <span class="nav-icon"><i data-lucide="clipboard-check"></i></span>
         <span class="nav-label">Checklist de Segurança</span>
@@ -1845,6 +1854,32 @@ nono run --profile openclaw -- openclaw gateway</pre>
   </div>
 </div>
 
+<!-- ============================================================ PAIRINGS -->
+<div class="section" id="pairings-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="user-check"></i></span>
+    <h2>Aprovações de Pairing</h2>
+    <button onclick="loadPairings()" style="background:var(--s2);color:var(--t3);border:1px solid var(--b1);margin-left:auto;font-size:12px;padding:5px 10px;border-radius:var(--r2)">🔄 Atualizar</button>
+  </div>
+  <p class="hint" style="margin-bottom:var(--sp2)">Solicitações de pairing pendentes de aprovação. Usuários que solicitaram acesso via DM mas ainda não foram aprovados.</p>
+  <div id="pairings-container">
+    <div class="loading-spinner" style="text-align:center;padding:40px;color:var(--t3)">Carregando...</div>
+  </div>
+</div>
+
+<!-- ============================================================ METRICS -->
+<div class="section" id="metrics-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="activity"></i></span>
+    <h2>Métricas do Sistema</h2>
+    <button onclick="loadMetrics()" style="background:var(--s2);color:var(--t3);border:1px solid var(--b1);margin-left:auto;font-size:12px;padding:5px 10px;border-radius:var(--r2)">🔄 Atualizar</button>
+  </div>
+  <p class="hint" style="margin-bottom:var(--sp2)">Recursos do servidor onde o OpenClaw está rodando.</p>
+  <div id="metrics-container" class="cards-grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">
+    <div class="loading-spinner" style="text-align:center;padding:40px;color:var(--t3)">Carregando...</div>
+  </div>
+</div>
+
 <!-- ============================================================ CHECKLIST -->
 <div class="section" id="checklist-section">
   <div class="section-header">
@@ -2076,6 +2111,128 @@ async function loadProfiles() {
   }
 }
 
+// ---------------------------------------------------------- pairings
+async function loadPairings() {
+  const el = document.getElementById('pairings-container');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/pairings');
+    const data = await res.json();
+    const pending = data.pending || [];
+    const approved = data.approved || [];
+    const blocked = data.blocked || [];
+
+    // nav badge
+    const badge = document.getElementById('pairings-nav-badge');
+    if (badge) {
+      if (pending.length > 0) { badge.textContent = pending.length; badge.style.display = ''; }
+      else badge.style.display = 'none';
+    }
+
+    const channelIcon = { whatsapp: '📱', telegram: '✈️', discord: '🎮', teams: '💼', slack: '💬' };
+
+    const pairingCard = (p, type) => {
+      const icon = channelIcon[p.channel] || '💬';
+      const ts = p.requested_at ? new Date(p.requested_at).toLocaleString('pt-BR') : '—';
+      const actions = type === 'pending' ? `
+        <button onclick="approvePairing('${p.id}')" style="background:var(--green-dim,#0d2b1a);color:var(--green,#4ade80);border:1px solid var(--green,#4ade80);padding:4px 12px;border-radius:var(--r2);font-size:12px;cursor:pointer">✓ Aprovar</button>
+        <button onclick="rejectPairing('${p.id}')"  style="background:var(--red-dim,#2b0d0d);color:var(--red,#f87171);border:1px solid var(--red,#f87171);padding:4px 12px;border-radius:var(--r2);font-size:12px;cursor:pointer">✕ Rejeitar</button>
+      ` : '';
+      const statusBadge = type === 'approved'
+        ? '<span style="font-size:10px;background:var(--green-dim,#0d2b1a);color:var(--green,#4ade80);padding:2px 8px;border-radius:10px">Aprovado</span>'
+        : type === 'blocked'
+        ? '<span style="font-size:10px;background:var(--red-dim,#2b0d0d);color:var(--red,#f87171);padding:2px 8px;border-radius:10px">Rejeitado</span>'
+        : '<span style="font-size:10px;background:var(--yellow-dim,#2b220d);color:var(--yellow,#fbbf24);padding:2px 8px;border-radius:10px">Pendente</span>';
+      return `<div style="background:var(--s1);border:1px solid var(--b1);border-radius:var(--r2);padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap" id="pairing-row-${p.id}">
+        <span style="font-size:20px">${icon}</span>
+        <div style="flex:1;min-width:150px">
+          <div style="font-weight:600;color:var(--t1)">${p.name || p.contact || p.id}</div>
+          <div style="font-size:11px;color:var(--t3)">${p.channel} · ${p.contact || ''} · ${ts}</div>
+        </div>
+        ${statusBadge}
+        <div style="display:flex;gap:6px">${actions}</div>
+      </div>`;
+    };
+
+    let html = '';
+    if (pending.length === 0 && approved.length === 0 && blocked.length === 0) {
+      html = '<div style="text-align:center;padding:40px;color:var(--t3)">Nenhuma solicitação de pairing encontrada.<br><small>O arquivo pairings.json será criado pelo daemon do OpenClaw.</small></div>';
+    } else {
+      if (pending.length) html += `<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pendentes (${pending.length})</div><div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">${pending.map(p => pairingCard(p, 'pending')).join('')}</div>`;
+      if (approved.length) html += `<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Aprovados (${approved.length})</div><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">${approved.map(p => pairingCard(p, 'approved')).join('')}</div>`;
+      if (blocked.length) html += `<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Rejeitados (${blocked.length})</div><div style="display:flex;flex-direction:column;gap:6px">${blocked.map(p => pairingCard(p, 'blocked')).join('')}</div>`;
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--red)">❌ Erro ao carregar pairings</div>';
+  }
+}
+
+async function approvePairing(id) {
+  const res = await fetch('/api/pairings/approve', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({id}) });
+  const d = await res.json();
+  if (d.ok) { showToast('✅ Pairing aprovado'); loadPairings(); }
+  else showToast('❌ ' + (d.error || 'Erro'), true);
+}
+
+async function rejectPairing(id) {
+  const res = await fetch('/api/pairings/reject', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({id}) });
+  const d = await res.json();
+  if (d.ok) { showToast('🚫 Pairing rejeitado'); loadPairings(); }
+  else showToast('❌ ' + (d.error || 'Erro'), true);
+}
+
+// ---------------------------------------------------------- metrics
+function _metricBar(pct, color) {
+  return `<div style="background:var(--s2);border-radius:4px;height:6px;overflow:hidden;margin-top:4px">
+    <div style="background:${color};width:${Math.min(pct,100)}%;height:100%;border-radius:4px;transition:width .4s"></div>
+  </div>`;
+}
+
+let _metricsTimer = null;
+
+async function loadMetrics() {
+  const el = document.getElementById('metrics-container');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/metrics');
+    const d = await res.json();
+    if (d.error) { el.innerHTML = `<div style="color:var(--red);padding:20px">${d.error}</div>`; return; }
+
+    const ramColor  = d.ram_pct  > 85 ? 'var(--red,#f87171)' : d.ram_pct  > 60 ? 'var(--yellow,#fbbf24)' : 'var(--green,#4ade80)';
+    const diskColor = d.disk_pct > 85 ? 'var(--red,#f87171)' : d.disk_pct > 60 ? 'var(--yellow,#fbbf24)' : 'var(--green,#4ade80)';
+    const cpuColor  = d.cpu_pct  > 85 ? 'var(--red,#f87171)' : d.cpu_pct  > 60 ? 'var(--yellow,#fbbf24)' : 'var(--blue,#60a5fa)';
+
+    const card = (icon, title, value, sub, bar) => `
+      <div style="background:var(--s1);border:1px solid var(--b1);border-radius:var(--r3);padding:var(--sp2)">
+        <div style="font-size:20px;margin-bottom:4px">${icon}</div>
+        <div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em">${title}</div>
+        <div style="font-size:22px;font-weight:700;color:var(--t1);margin:4px 0">${value}</div>
+        <div style="font-size:11px;color:var(--t3)">${sub}</div>
+        ${bar}
+      </div>`;
+
+    let html = '';
+    if (d.cpu_pct  !== undefined) html += card('⚡', 'CPU', d.cpu_pct.toFixed(1) + '%', 'Uso atual', _metricBar(d.cpu_pct, cpuColor));
+    if (d.ram_pct  !== undefined) html += card('🧠', 'RAM', d.ram_pct + '%', `${d.ram_used_mb} / ${d.ram_total_mb} MB`, _metricBar(d.ram_pct, ramColor));
+    if (d.disk_pct !== undefined) html += card('💾', 'Disco (/)', d.disk_pct + '%', `${d.disk_used_gb} / ${d.disk_total_gb} GB`, _metricBar(d.disk_pct, diskColor));
+    if (d.load_1m  !== undefined) html += card('📊', 'Load avg', d.load_1m.toFixed(2), `5m: ${d.load_5m?.toFixed(2)} · 15m: ${d.load_15m?.toFixed(2)}`, '');
+    if (d.uptime)                 html += card('⏱️', 'Uptime', d.uptime, `Fonte: ${d.source || 'sistema'}`, '');
+    if (d.procs)                  html += card('🔢', 'Processos', d.procs.split('/')[1] || d.procs, `Rodando: ${d.procs.split('/')[0] || '—'}`, '');
+
+    el.innerHTML = html || '<div style="color:var(--t3);padding:20px">Nenhuma métrica disponível</div>';
+
+    // auto-refresh a cada 30s enquanto a seção estiver visível
+    clearTimeout(_metricsTimer);
+    _metricsTimer = setTimeout(() => {
+      const sec = document.getElementById('metrics-section');
+      if (sec && !sec.classList.contains('hidden')) loadMetrics();
+    }, 30000);
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--red)">❌ Erro ao carregar métricas</div>';
+  }
+}
+
 async function previewProfile(name) {
   const panel = document.getElementById('profile-diff-' + name);
   if (!panel) return;
@@ -2286,6 +2443,8 @@ const SECTION_META = {
   'config-diff-section': { icon: 'git-compare',    title: 'Config Diff' },
   'backups-section':     { icon: 'hard-drive',     title: 'Backups' },
   'profiles-section':    { icon: 'layers',          title: 'Perfis de Segurança' },
+  'pairings-section':    { icon: 'user-check',      title: 'Aprovações de Pairing' },
+  'metrics-section':     { icon: 'activity',        title: 'Métricas do Sistema' },
 };
 
 // ── Show a single section ────────────────────────────────────
@@ -2319,6 +2478,8 @@ function showSection(id) {
 
   // auto-load section data
   if (id === 'profiles-section') loadProfiles();
+  if (id === 'pairings-section') loadPairings();
+  if (id === 'metrics-section')  loadMetrics();
 }
 
 // ── Sidebar collapse ─────────────────────────────────────────
