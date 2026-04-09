@@ -88,18 +88,20 @@ def discover_user_configs() -> list:
     found = []
     if os.name != "nt":  # Linux / macOS
         candidates = []
-        # Primary: read real users from /etc/passwd (uid >= 1000 = regular users)
+        # Primary: read real users from /etc/passwd (uid >= 1000 + root)
         try:
-            import pwd
-            for entry in sorted(pwd.getpwall(), key=lambda e: e.pw_name):
-                uid = entry.pw_uid
-                home = Path(entry.pw_dir)
-                name = entry.pw_name
-                # include root (uid=0) and regular users (uid>=1000), skip system accounts
-                if uid == 0 or uid >= 1000:
-                    candidates.append((name, home / ".openclaw" / "openclaw.json"))
-        except Exception as _pwd_err:
-            app.logger.warning("pwd.getpwall() failed: %s — falling back to /home scan", _pwd_err)
+            import pwd as _pwd
+            entries = sorted(_pwd.getpwall(), key=lambda e: e.pw_name)
+            for entry in entries:
+                try:
+                    uid  = entry.pw_uid
+                    home = Path(entry.pw_dir) if entry.pw_dir else None
+                    name = entry.pw_name
+                    if home and (uid == 0 or uid >= 1000):
+                        candidates.append((name, home / ".openclaw" / "openclaw.json"))
+                except Exception:
+                    pass
+        except Exception:
             # Fallback: scan /home/*
             home_base = Path("/home")
             if home_base.exists():
@@ -111,25 +113,25 @@ def discover_user_configs() -> list:
                     pass
             candidates.append(("root", Path("/root/.openclaw/openclaw.json")))
         for username, cfg in candidates:
-            home_dir = cfg.parent.parent  # /home/username or /root
             try:
-                home_accessible = os.access(home_dir, os.X_OK)
-                exists = cfg.exists() if home_accessible else False
+                home_dir = cfg.parent.parent  # /home/username or /root
+                home_accessible = os.access(str(home_dir), os.X_OK)
+                exists = bool(cfg.exists()) if home_accessible else False
                 locked = not home_accessible
                 found.append({
                     "user": username,
                     "path": str(cfg),
-                    "readable": os.access(cfg, os.R_OK) if exists else None,
-                    "writable": os.access(cfg, os.W_OK) if exists else None,
+                    "readable": bool(os.access(str(cfg), os.R_OK)) if exists else None,
+                    "writable": bool(os.access(str(cfg), os.W_OK)) if exists else None,
                     "exists": exists if home_accessible else None,
                     "locked": locked,
                 })
-            except PermissionError:
+            except Exception:
                 found.append({
                     "user": username,
                     "path": str(cfg),
-                    "readable": False,
-                    "writable": False,
+                    "readable": None,
+                    "writable": None,
                     "exists": None,
                     "locked": True,
                 })
@@ -165,8 +167,11 @@ def get_active_paths():
 def load_config() -> dict:
     config_path, _, _ = get_active_paths()
     if config_path.exists():
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return {}
     return {}
 
 
