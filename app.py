@@ -443,7 +443,6 @@ def _patch_personal_preset(current: dict) -> dict:
             }
         },
         "tools": {
-            "profile": "standard",
             "allow": [
                 "Read(**)",
                 "Edit(~/projetos/**)",
@@ -513,7 +512,6 @@ def _patch_team_preset(current: dict) -> dict:
             }
         },
         "tools": {
-            "profile": "restricted",
             "allow": [
                 "Read(**)",
                 "Edit(src/**)",
@@ -592,7 +590,6 @@ def _patch_enterprise_preset(current: dict) -> dict:
             }
         },
         "tools": {
-            "profile": "minimal",
             "deny": [
                 "Bash(sudo *)",
                 "Bash(chmod *)",
@@ -663,7 +660,6 @@ def _patch_devops_preset(current: dict) -> dict:
             }
         },
         "tools": {
-            "profile": "restricted",
             "allow": [
                 "Read(**)",
                 "Edit(src/**)", "Edit(tests/**)", "Edit(.github/**)",
@@ -840,7 +836,6 @@ def get_ui_state(cfg: dict) -> dict:
         "sandbox_scope":            _get(cfg, "agents", "defaults", "sandbox", "scope",           default=""),
         "sandbox_workspace_access": _get(cfg, "agents", "defaults", "sandbox", "workspaceAccess", default=""),
 
-        "tools_profile":    _get(cfg, "tools", "profile", default=""),
         "tools_allow":      ", ".join(_get(cfg, "tools", "allow", default=[]) or []),
         "tools_deny":       ", ".join(_get(cfg, "tools", "deny",  default=[]) or []),
 
@@ -896,7 +891,6 @@ RECOMMENDED = {
     "tools_deny_secrets":   ("Deny Read(.aws/.ssh)",   "tools.deny",                              "<set>",               [], "critical"),
     "elevated_disabled": ("Elevated tools desabilitado", "agents.defaults.tools.elevated.enabled", "false",             ["false", "False"], "high"),
     # Missing checks from security guide
-    "tools_profile":    ("Tools profile",               "tools.profile",          "restricted",  ["restricted", "minimal"], "high"),
     "plugins_deny":     ("Plugins bloqueados",           "plugins.deny",           "<non-empty>", [],                       "high"),
     "log_console_level":("Log consoleLevel",             "logging.consoleLevel",   "warn",        ["warn", "error"],        "low"),
     "dm_scope":         ("DM scope (session)",           "session.dmScope",        "contacts",    ["contacts", "none"],     "medium"),
@@ -944,7 +938,6 @@ def build_status(cfg: dict) -> list:
         "tools_deny_secrets":   "<set>" if _tools_deny_contains(cfg, ".aws", ".ssh") else "",
         "elevated_disabled":    "false" if elevated_enabled is False else (str(elevated_enabled).lower() if elevated_enabled is not None else ""),
         # New missing checks
-        "tools_profile":     str(_get(cfg, "tools", "profile", default="")),
         "plugins_deny":      "<non-empty>" if (_get(cfg, "plugins", "deny", default=[]) or []) else "",
         "log_console_level": str(_get(cfg, "logging", "consoleLevel", default="")),
         "dm_scope":          str(_get(cfg, "session", "dmScope", default="")),
