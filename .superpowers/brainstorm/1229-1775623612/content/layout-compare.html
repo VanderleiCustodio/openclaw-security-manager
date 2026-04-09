@@ -1,0 +1,123 @@
+<h2>Design das Seções — Qual direção?</h2>
+<p class="subtitle">Problema: campos usam ~50% da largura. Duas abordagens para resolver.</p>
+
+<div class="options">
+
+  <div class="option" data-choice="grid" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Grid 2 colunas — campos lado a lado</h3>
+      <p>Campos relacionados ficam na mesma linha. Usa toda a largura. Mais denso, menos scroll.</p>
+
+      <!-- Mockup grid -->
+      <div style="margin-top:12px;background:#f8f8f8;border:1px solid #e2e2e2;border-radius:10px;padding:20px;font-size:12px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e2e2e2">
+          <div style="width:28px;height:28px;background:#f0f0f0;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px">📋</div>
+          <span style="font-weight:700;font-size:14px">5. Audit Logging</span>
+        </div>
+
+        <!-- Row 1: level + consoleLevel side by side -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px">
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:4px;font-family:monospace">logging.level</div>
+            <select style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;background:#fff">
+              <option>info (recomendado)</option></select>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:4px;font-family:monospace">logging.consoleLevel</div>
+            <select style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;background:#fff">
+              <option>info</option></select>
+          </div>
+        </div>
+
+        <!-- Row 2: redact + consoleStyle side by side -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px">
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:4px;font-family:monospace">logging.redactSensitive</div>
+            <select style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;background:#fff">
+              <option>tools (recomendado)</option></select>
+            <div style="margin-top:3px;font-size:10px;color:#16a34a;font-weight:600">● tools</div>
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:4px;font-family:monospace">logging.consoleStyle</div>
+            <select style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;background:#fff">
+              <option>json</option></select>
+          </div>
+        </div>
+
+        <!-- Row 3: file full-width -->
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:4px;font-family:monospace">logging.file</div>
+          <input style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;box-sizing:border-box" placeholder="~/.openclaw/logs/gateway.log">
+          <div style="font-size:10px;color:#aaa;margin-top:2px">Deixe em branco para não alterar</div>
+        </div>
+
+        <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid #e2e2e2">
+          <button style="padding:6px 14px;border:1px solid #ddd;border-radius:6px;font-size:12px;background:#fff">Preview</button>
+          <button style="padding:6px 14px;border:none;border-radius:6px;font-size:12px;background:#111;color:#fff;font-weight:600">Aplicar</button>
+        </div>
+      </div>
+      <p style="margin-top:8px;font-size:12px;opacity:0.6">✓ 50% menos scroll · ✓ campos relacionados juntos · ✓ inputs full-width</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="cards" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Sub-cards agrupados por tema</h3>
+      <p>Dentro de cada seção, os campos são agrupados em cards menores por responsabilidade. Mais estruturado, mais fácil de escanear.</p>
+
+      <!-- Mockup cards -->
+      <div style="margin-top:12px;background:#f8f8f8;border:1px solid #e2e2e2;border-radius:10px;padding:20px;font-size:12px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e2e2e2">
+          <div style="width:28px;height:28px;background:#f0f0f0;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px">📋</div>
+          <span style="font-weight:700;font-size:14px">5. Audit Logging</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <!-- Card 1: Log File -->
+          <div style="background:#fff;border:1px solid #e2e2e2;border-radius:8px;padding:14px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#aaa;margin-bottom:10px">Arquivo de log</div>
+            <div style="margin-bottom:8px">
+              <div style="font-size:11px;color:#888;margin-bottom:3px;font-family:monospace">logging.level</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:11px;background:#fff"><option>info</option></select>
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:3px;font-family:monospace">logging.file</div>
+              <input style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:11px;box-sizing:border-box" placeholder="~/.openclaw/logs/gateway.log">
+            </div>
+          </div>
+
+          <!-- Card 2: Console -->
+          <div style="background:#fff;border:1px solid #e2e2e2;border-radius:8px;padding:14px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#aaa;margin-bottom:10px">Console</div>
+            <div style="margin-bottom:8px">
+              <div style="font-size:11px;color:#888;margin-bottom:3px;font-family:monospace">logging.consoleLevel</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:11px;background:#fff"><option>info</option></select>
+            </div>
+            <div>
+              <div style="font-size:11px;color:#888;margin-bottom:3px;font-family:monospace">logging.consoleStyle</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:11px;background:#fff"><option>json</option></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Redação — full width -->
+        <div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:14px;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#d97706;margin-bottom:10px">⚠ Redação de dados sensíveis</div>
+          <div>
+            <div style="font-size:11px;color:#888;margin-bottom:3px;font-family:monospace">logging.redactSensitive</div>
+            <select style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:11px;background:#fff"><option>tools (recomendado)</option></select>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid #e2e2e2">
+          <button style="padding:6px 14px;border:1px solid #ddd;border-radius:6px;font-size:12px;background:#fff">Preview</button>
+          <button style="padding:6px 14px;border:none;border-radius:6px;font-size:12px;background:#111;color:#fff;font-weight:600">Aplicar</button>
+        </div>
+      </div>
+      <p style="margin-top:8px;font-size:12px;opacity:0.6">✓ Agrupamento semântico · ✓ campos críticos destacados · ✗ mais estrutura para manter</p>
+    </div>
+  </div>
+
+</div>

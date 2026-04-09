@@ -1,0 +1,191 @@
+<h2>Design System — Fonte & Cor</h2>
+<p class="subtitle">Referências: Linear, Vercel, Raycast, GitHub. Qual direção combina mais?</p>
+
+<div class="options">
+
+  <!-- OPTION A: Geist + Slate -->
+  <div class="option" data-choice="geist-slate" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Geist + Slate Blue-Gray</h3>
+      <p>Fonte da Vercel, desenhada para ferramentas de dev. Tom slate (azul-cinza frio) — como Linear e Raycast. Sofisticado e técnico.</p>
+
+      <!-- Preview A -->
+      <div style="margin-top:12px;background:#0A0A0F;border:1px solid #1E1E2E;border-radius:10px;padding:20px;font-size:12px;font-family:'Geist','Inter',sans-serif">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1E1E2E">
+          <div style="width:28px;height:28px;background:#13131F;border:1px solid #1E1E2E;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px">📋</div>
+          <span style="font-weight:600;font-size:13px;color:#E8E8F0;letter-spacing:.01em">5. Audit Logging</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div style="background:#0D0D18;border:1px solid #1E1E2E;border-radius:8px;padding:12px">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4A4A6A;margin-bottom:8px">Arquivo de log</div>
+            <div style="margin-bottom:7px">
+              <div style="font-size:10px;color:#5A5A8A;margin-bottom:3px;font-family:'Geist Mono','JetBrains Mono',monospace">logging.level</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A40;border-radius:5px;font-size:11px;background:#13131F;color:#B0B0D0;font-family:inherit"><option>info</option></select>
+            </div>
+            <div>
+              <div style="font-size:10px;color:#5A5A8A;margin-bottom:3px;font-family:'Geist Mono','JetBrains Mono',monospace">logging.file</div>
+              <input style="width:100%;padding:5px 8px;border:1px solid #2A2A40;border-radius:5px;font-size:11px;background:#13131F;color:#B0B0D0;box-sizing:border-box;font-family:inherit" placeholder="~/.openclaw/logs/gateway.log">
+            </div>
+          </div>
+
+          <div style="background:#0D0D18;border:1px solid #1E1E2E;border-radius:8px;padding:12px">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4A4A6A;margin-bottom:8px">Console</div>
+            <div style="margin-bottom:7px">
+              <div style="font-size:10px;color:#5A5A8A;margin-bottom:3px;font-family:'Geist Mono','JetBrains Mono',monospace">logging.consoleLevel</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A40;border-radius:5px;font-size:11px;background:#13131F;color:#B0B0D0;font-family:inherit"><option>info</option></select>
+            </div>
+            <div>
+              <div style="font-size:10px;color:#5A5A8A;margin-bottom:3px;font-family:'Geist Mono','JetBrains Mono',monospace">logging.consoleStyle</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A40;border-radius:5px;font-size:11px;background:#13131F;color:#B0B0D0;font-family:inherit"><option>json</option></select>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#0D0D18;border:1px solid #2A1F00;border-radius:8px;padding:12px;margin-bottom:12px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7A5500;margin-bottom:8px">⚠ Redação de dados sensíveis</div>
+          <div style="font-size:10px;color:#5A5A8A;margin-bottom:3px;font-family:'Geist Mono','JetBrains Mono',monospace">logging.redactSensitive</div>
+          <select style="width:100%;padding:5px 8px;border:1px solid #2A2A40;border-radius:5px;font-size:11px;background:#13131F;color:#B0B0D0;font-family:inherit"><option>tools (recomendado)</option></select>
+        </div>
+
+        <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid #1E1E2E">
+          <button style="padding:6px 14px;border:1px solid #2A2A40;border-radius:6px;font-size:11px;background:transparent;color:#8080A0;font-family:inherit;cursor:pointer">Preview</button>
+          <button style="padding:6px 14px;border:none;border-radius:6px;font-size:11px;background:#5B6AF0;color:#fff;font-weight:600;font-family:inherit;cursor:pointer">Aplicar</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:16px;font-size:11px;opacity:0.6">
+        <span><b>Fonte:</b> Geist (Vercel)</span>
+        <span><b>Fundo:</b> #0A0A0F</span>
+        <span><b>Accent:</b> #5B6AF0 Indigo</span>
+      </div>
+      <p style="margin-top:4px;font-size:11px;opacity:0.5">→ Como Linear · Raycast · Vercel</p>
+    </div>
+  </div>
+
+  <!-- OPTION B: Inter + Pure Zinc (melhorado) -->
+  <div class="option" data-choice="inter-zinc" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Inter + Zinc Warm</h3>
+      <p>Inter, a fonte padrão de 90% dos SaaS modernos. Zinc quente (levemente marrom, não frio) com accent emerald verde — visual de terminal profissional.</p>
+
+      <!-- Preview B -->
+      <div style="margin-top:12px;background:#0C0C0B;border:1px solid #1F1F1E;border-radius:10px;padding:20px;font-size:12px;font-family:'Inter','Helvetica Neue',sans-serif">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1F1F1E">
+          <div style="width:28px;height:28px;background:#161615;border:1px solid #282826;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px">📋</div>
+          <span style="font-weight:600;font-size:13px;color:#EFEFEC;letter-spacing:.01em">5. Audit Logging</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div style="background:#131312;border:1px solid #262624;border-radius:8px;padding:12px">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4A4A48;margin-bottom:8px">Arquivo de log</div>
+            <div style="margin-bottom:7px">
+              <div style="font-size:10px;color:#58584F;margin-bottom:3px;font-family:'JetBrains Mono','Fira Code',monospace">logging.level</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A28;border-radius:5px;font-size:11px;background:#1A1A18;color:#B8B8B0;font-family:inherit"><option>info</option></select>
+            </div>
+            <div>
+              <div style="font-size:10px;color:#58584F;margin-bottom:3px;font-family:'JetBrains Mono','Fira Code',monospace">logging.file</div>
+              <input style="width:100%;padding:5px 8px;border:1px solid #2A2A28;border-radius:5px;font-size:11px;background:#1A1A18;color:#B8B8B0;box-sizing:border-box;font-family:inherit" placeholder="~/.openclaw/logs/gateway.log">
+            </div>
+          </div>
+
+          <div style="background:#131312;border:1px solid #262624;border-radius:8px;padding:12px">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#4A4A48;margin-bottom:8px">Console</div>
+            <div style="margin-bottom:7px">
+              <div style="font-size:10px;color:#58584F;margin-bottom:3px;font-family:'JetBrains Mono','Fira Code',monospace">logging.consoleLevel</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A28;border-radius:5px;font-size:11px;background:#1A1A18;color:#B8B8B0;font-family:inherit"><option>info</option></select>
+            </div>
+            <div>
+              <div style="font-size:10px;color:#58584F;margin-bottom:3px;font-family:'JetBrains Mono','Fira Code',monospace">logging.consoleStyle</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A28;border-radius:5px;font-size:11px;background:#1A1A18;color:#B8B8B0;font-family:inherit"><option>json</option></select>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#131312;border:1px solid #2C2200;border-radius:8px;padding:12px;margin-bottom:12px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7A6000;margin-bottom:8px">⚠ Redação de dados sensíveis</div>
+          <div style="font-size:10px;color:#58584F;margin-bottom:3px;font-family:'JetBrains Mono','Fira Code',monospace">logging.redactSensitive</div>
+          <select style="width:100%;padding:5px 8px;border:1px solid #2A2A28;border-radius:5px;font-size:11px;background:#1A1A18;color:#B8B8B0;font-family:inherit"><option>tools (recomendado)</option></select>
+        </div>
+
+        <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid #1F1F1E">
+          <button style="padding:6px 14px;border:1px solid #2A2A28;border-radius:6px;font-size:11px;background:transparent;color:#6A6A60;font-family:inherit;cursor:pointer">Preview</button>
+          <button style="padding:6px 14px;border:none;border-radius:6px;font-size:11px;background:#10B981;color:#021A10;font-weight:600;font-family:inherit;cursor:pointer">Aplicar</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:16px;font-size:11px;opacity:0.6">
+        <span><b>Fonte:</b> Inter</span>
+        <span><b>Fundo:</b> #0C0C0B</span>
+        <span><b>Accent:</b> #10B981 Emerald</span>
+      </div>
+      <p style="margin-top:4px;font-size:11px;opacity:0.5">→ Como Stripe · Supabase · PlanetScale</p>
+    </div>
+  </div>
+
+  <!-- OPTION C: Geist + True Black + Blue accent -->
+  <div class="option" data-choice="geist-midnight" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Geist + Midnight + Azul elétrico</h3>
+      <p>True black (OLED-friendly), accent azul elétrico para ações primárias. Estilo Figma / GitHub Copilot / Claude.ai — premium e clean.</p>
+
+      <!-- Preview C -->
+      <div style="margin-top:12px;background:#000000;border:1px solid #1A1A1A;border-radius:10px;padding:20px;font-size:12px;font-family:'Geist','Inter',sans-serif">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1A1A1A">
+          <div style="width:28px;height:28px;background:#111;border:1px solid #222;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px">📋</div>
+          <span style="font-weight:600;font-size:13px;color:#F0F0F0;letter-spacing:.01em">5. Audit Logging</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div style="background:#0A0A0A;border:1px solid #222;border-radius:8px;padding:12px">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3A3A3A;margin-bottom:8px">Arquivo de log</div>
+            <div style="margin-bottom:7px">
+              <div style="font-size:10px;color:#444;margin-bottom:3px;font-family:'Geist Mono',monospace">logging.level</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A2A;border-radius:5px;font-size:11px;background:#111;color:#C0C0C0;font-family:inherit"><option>info</option></select>
+            </div>
+            <div>
+              <div style="font-size:10px;color:#444;margin-bottom:3px;font-family:'Geist Mono',monospace">logging.file</div>
+              <input style="width:100%;padding:5px 8px;border:1px solid #2A2A2A;border-radius:5px;font-size:11px;background:#111;color:#C0C0C0;box-sizing:border-box;font-family:inherit" placeholder="~/.openclaw/logs/gateway.log">
+            </div>
+          </div>
+
+          <div style="background:#0A0A0A;border:1px solid #222;border-radius:8px;padding:12px">
+            <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#3A3A3A;margin-bottom:8px">Console</div>
+            <div style="margin-bottom:7px">
+              <div style="font-size:10px;color:#444;margin-bottom:3px;font-family:'Geist Mono',monospace">logging.consoleLevel</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A2A;border-radius:5px;font-size:11px;background:#111;color:#C0C0C0;font-family:inherit"><option>info</option></select>
+            </div>
+            <div>
+              <div style="font-size:10px;color:#444;margin-bottom:3px;font-family:'Geist Mono',monospace">logging.consoleStyle</div>
+              <select style="width:100%;padding:5px 8px;border:1px solid #2A2A2A;border-radius:5px;font-size:11px;background:#111;color:#C0C0C0;font-family:inherit"><option>json</option></select>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#0A0A0A;border:1px solid #2A1800;border-radius:8px;padding:12px;margin-bottom:12px">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6A3800;margin-bottom:8px">⚠ Redação de dados sensíveis</div>
+          <div style="font-size:10px;color:#444;margin-bottom:3px;font-family:'Geist Mono',monospace">logging.redactSensitive</div>
+          <select style="width:100%;padding:5px 8px;border:1px solid #2A2A2A;border-radius:5px;font-size:11px;background:#111;color:#C0C0C0;font-family:inherit"><option>tools (recomendado)</option></select>
+        </div>
+
+        <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid #1A1A1A">
+          <button style="padding:6px 14px;border:1px solid #2A2A2A;border-radius:6px;font-size:11px;background:transparent;color:#555;font-family:inherit;cursor:pointer">Preview</button>
+          <button style="padding:6px 14px;border:none;border-radius:6px;font-size:11px;background:#2563EB;color:#fff;font-weight:600;font-family:inherit;cursor:pointer">Aplicar</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:16px;font-size:11px;opacity:0.6">
+        <span><b>Fonte:</b> Geist (Vercel)</span>
+        <span><b>Fundo:</b> #000000</span>
+        <span><b>Accent:</b> #2563EB Blue-600</span>
+      </div>
+      <p style="margin-top:4px;font-size:11px;opacity:0.5">→ Como Figma · GitHub Copilot · Claude</p>
+    </div>
+  </div>
+
+</div>
+
+<p style="margin-top:16px;font-size:13px;opacity:0.4;text-align:center">Todas com tema claro automático · Geist disponível via Google Fonts/NPM · Inter via Google Fonts</p>

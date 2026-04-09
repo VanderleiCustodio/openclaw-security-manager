@@ -1,0 +1,49 @@
+<h2>Sugestão de Roadmap</h2>
+<p class="subtitle">Baseado no impacto e complexidade de cada feature — qual fase você quer começar?</p>
+
+<div class="options" data-multiselect="false">
+
+  <div class="option" data-choice="fase1" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter" style="background:#16a34a22;color:#16a34a;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;white-space:nowrap">Fase 1</div>
+    <div class="content">
+      <h3>Fundação de Segurança &amp; UX <span style="font-size:12px;opacity:0.6">— 2–3 semanas</span></h3>
+      <p><strong>🛡️ Segurança do painel</strong> — senha + sessão com timeout + log de acesso<br>
+         <strong>✨ UX: busca global ⌘K</strong> — navegar entre seções por teclado<br>
+         <strong>📋 Allowlist visual de DMs</strong> — interface add/remove por canal<br>
+         <em>Por quê primeiro:</em> protege o manager em si e melhora o uso diário imediatamente.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="fase2" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter" style="background:#d9770622;color:#d97706;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;white-space:nowrap">Fase 2</div>
+    <div class="content">
+      <h3>Novos Canais &amp; Gateway <span style="font-size:12px;opacity:0.6">— 2–3 semanas</span></h3>
+      <p><strong>💬 Teams &amp; Slack</strong> — dmPolicy, pairing, mention em grupos<br>
+         <strong>🌐 Gateway: rate limiting + IP whitelist</strong> — controle de acesso por origem<br>
+         <em>Por quê segundo:</em> expande cobertura de canais e reforça o ponto de entrada.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="fase3" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter" style="background:#7c3aed22;color:#7c3aed;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;white-space:nowrap">Fase 3</div>
+    <div class="content">
+      <h3>Monitoramento &amp; Alertas <span style="font-size:12px;opacity:0.6">— 2–3 semanas</span></h3>
+      <p><strong>📊 Dashboard ao vivo</strong> — eventos SSE, conexões ativas, status do processo<br>
+         <strong>🔔 Alertas</strong> — webhook (Slack/Teams/Discord) quando algo crítico ocorre<br>
+         <em>Por quê terceiro:</em> requer canais configurados (Fase 2) para os alertas funcionarem.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="fase4" onclick="toggleSelect(this)" style="align-items:flex-start">
+    <div class="letter" style="background:#0ea5e922;color:#0ea5e9;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;white-space:nowrap">Fase 4</div>
+    <div class="content">
+      <h3>Agentes &amp; Multi-Ambiente <span style="font-size:12px;opacity:0.6">— 3–4 semanas</span></h3>
+      <p><strong>🤖 Gestão de agentes</strong> — lista, histórico, kill, quotas por agente<br>
+         <strong>🗂️ Multi-ambiente</strong> — perfis dev/staging/prod, diff visual entre configs<br>
+         <em>Por quê por último:</em> mais complexos, requerem API do openclaw estável.</p>
+    </div>
+  </div>
+
+</div>
+
+<p style="margin-top:16px;font-size:13px;opacity:0.6;text-align:center">Clique na fase que quer atacar primeiro • ou me diga no terminal</p>

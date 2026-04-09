@@ -1,0 +1,116 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1775761679657,
+  "projectRoot": "C:\\Users\\vande\\OneDrive\\Documents\\files",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "pip",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "static"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "deploy": {
+      "path": "deploy",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1775761679637,
+      "keyFiles": [
+        "install.sh",
+        "nginx.conf",
+        "openclaw.service"
+      ]
+    },
+    "static": {
+      "path": "static",
+      "purpose": "Static files",
+      "fileCount": 0,
+      "lastAccessed": 1775761679637,
+      "keyFiles": []
+    },
+    "templates": {
+      "path": "templates",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1775761679638,
+      "keyFiles": [
+        "index.html",
+        "login.html",
+        "login_2fa.html"
+      ]
+    },
+    "__pycache__": {
+      "path": "__pycache__",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1775761679638,
+      "keyFiles": [
+        "auth.cpython-314.pyc",
+        "auth_routes.cpython-314.pyc"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "app.py",
+      "accessCount": 51,
+      "lastAccessed": 1775763111272,
+      "type": "file"
+    },
+    {
+      "path": "templates\\index.html",
+      "accessCount": 23,
+      "lastAccessed": 1775762775064,
+      "type": "directory"
+    },
+    {
+      "path": "",
+      "accessCount": 3,
+      "lastAccessed": 1775762603046,
+      "type": "directory"
+    },
+    {
+      "path": "requirements.txt",
+      "accessCount": 2,
+      "lastAccessed": 1775762618205,
+      "type": "file"
+    },
+    {
+      "path": ".superpowers\\brainstorm\\1229-1775623612\\content\\feature-ideas.html",
+      "accessCount": 1,
+      "lastAccessed": 1775762588773,
+      "type": "directory"
+    }
+  ],
+  "userDirectives": []
+}

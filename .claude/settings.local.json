@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import ast, sys; ast.parse\\(open\\(''app.py''\\).read\\(\\)\\); print\\(''app.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''app.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''app.py OK''\\)\")",
+      "Bash(curl -s --max-time 3 http://localhost:53497/)",
+      "Bash(ls \"C:\\\\Users\\\\vande\\\\OneDrive\\\\Documents\\\\files\\\\.superpowers\\\\brainstorm\\\\1229-1775623612\\\\state\"\" 2>/dev/null || dir \"C:UsersvandeOneDriveDocumentsfiles.superpowersbrainstorm1229-1775623612state\"\")",
+      "Bash(dir \"C:\\\\Users\\\\vande\\\\OneDrive\\\\Documents\\\\files\\\\.superpowers\\\\brainstorm\\\\1229-1775623612\\\\state\")",
+      "Bash(dir \"C:\\\\Users\\\\vande\\\\OneDrive\\\\Documents\\\\files\\\\.superpowers\\\\brainstorm\\\\1229-1775623612\\\\state\\\\events\")",
+      "Bash(cat \"C:\\\\Users\\\\vande\\\\OneDrive\\\\Documents\\\\files\\\\.superpowers\\\\brainstorm\\\\1229-1775623612\\\\state\\\\events\"/*)",
+      "WebSearch",
+      "Bash(curl -s http://localhost:53497/)",
+      "Bash(curl -s http://localhost:53497/screen/design-system)",
+      "Bash(curl -s \"http://localhost:53497/screen/layout-compare\")",
+      "Bash(curl -s \"http://localhost:53497/screens\")",
+      "Bash(curl -s \"http://localhost:53497/api/screens\")",
+      "Bash(curl -s \"http://localhost:53497/list\")",
+      "Bash(curl -sv \"http://localhost:53497/\")",
+      "Bash(curl -s http://localhost:53497/content/design-sistema.html)",
+      "Bash(curl -s http://localhost:53497/design-system)",
+      "Bash(curl -s http://localhost:53497/design-system.html)",
+      "WebFetch(domain:www.figma.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:dribbble.com)",
+      "WebFetch(domain:speckyboy.com)",
+      "Bash(python -c \":*)",
+      "Bash(bash \"C:/Users/vande/.claude/plugins/cache/omc/oh-my-claudecode/4.11.2/scripts/setup-progress.sh\" resume)",
+      "Bash(CLAUDE_PLUGIN_ROOT=\"C:/Users/vande/.claude/plugins/cache/omc/oh-my-claudecode/4.11.2\" bash \"$CLAUDE_PLUGIN_ROOT/scripts/setup-claude-md.sh\" global overwrite)",
+      "Bash(bash \"C:/Users/vande/.claude/plugins/cache/omc/oh-my-claudecode/4.11.2/scripts/setup-claude-md.sh\" global overwrite)",
+      "Bash(bash \"C:/Users/vande/.claude/plugins/cache/omc/oh-my-claudecode/4.11.2/scripts/setup-progress.sh\" save 2 global)",
+      "Bash(node:*)",
+      "Bash(CONFIG_TYPE=\"global\")",
+      "Bash(bash \"C:/Users/vande/.claude/plugins/cache/omc/oh-my-claudecode/4.11.2/scripts/setup-progress.sh\" save 3 \"$CONFIG_TYPE\")",
+      "mcp__plugin_oh-my-claudecode_t__state_write",
+      "Bash(gh auth:*)"
+    ]
+  }
+}
