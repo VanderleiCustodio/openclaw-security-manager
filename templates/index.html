@@ -2464,16 +2464,28 @@ function renderUserSelector(users, activePath) {
   const activeUser = users.find(u => u.path === activePath);
   label.textContent = activeUser ? activeUser.user : 'selecionar…';
 
-  list.innerHTML = users.map(u => `
-    <div class="user-menu-item ${u.path === activePath ? 'active' : ''} ${!u.readable ? 'no-access' : ''}"
-         onclick="${u.readable ? `selectUser('${u.path.replace(/'/g,"\\'")}')` : ''}"
-         title="${u.path}">
-      <i data-lucide="user" style="width:13px;height:13px;flex-shrink:0;"></i>
+  list.innerHTML = users.map(u => {
+    const isActive  = u.path === activePath;
+    const locked    = u.locked || !u.readable;
+    const noConfig  = u.exists === false;
+    const icon      = locked ? 'lock' : (noConfig ? 'file-x' : 'user');
+    const clickAttr = locked ? '' : `onclick="selectUser('${u.path.replace(/'/g,"\\'")}')"`;
+    let badge = '';
+    if (locked)   badge = '<span class="user-badge" style="background:var(--danger,#e53e3e)">sem acesso</span>';
+    else if (noConfig) badge = '<span class="user-badge">sem config</span>';
+    else if (!u.writable) badge = '<span class="user-badge">somente leitura</span>';
+    const tooltip = locked
+      ? `${u.user}: sem permissão (execute como root)`
+      : u.path;
+    return `
+    <div class="user-menu-item ${isActive ? 'active' : ''} ${locked ? 'no-access' : ''}"
+         ${clickAttr} title="${tooltip}"
+         style="${locked ? 'cursor:not-allowed;opacity:.6' : noConfig ? 'opacity:.75' : ''}">
+      <i data-lucide="${icon}" style="width:13px;height:13px;flex-shrink:0;"></i>
       <span>${u.user}</span>
-      ${!u.writable ? '<span class="user-badge">ro</span>' : ''}
-      ${!u.readable ? '<span class="user-badge">sem acesso</span>' : ''}
-    </div>
-  `).join('');
+      ${badge}
+    </div>`;
+  }).join('');
 
   lucide.createIcons({ nodes: [list] });
 }

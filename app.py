@@ -84,27 +84,66 @@ BACKUP_DIR = OPENCLAW_DIR / "backups"
 # ---------------------------------------------------------------------------
 
 def discover_user_configs() -> list:
-    """Return list of dicts for every user that has an openclaw.json on disk."""
+    """Return list of dicts for every Linux user, including those without read access."""
     found = []
     if os.name != "nt":  # Linux / macOS
-        home_base = Path("/home")
         candidates = []
-        if home_base.exists():
-            for user_home in sorted(home_base.iterdir()):
-                if user_home.is_dir():
-                    candidates.append((user_home.name, user_home / ".openclaw" / "openclaw.json"))
-        candidates.append(("root", Path("/root/.openclaw/openclaw.json")))
+        # Primary: read real users from /etc/passwd (uid >= 1000 = regular users)
+        try:
+            import pwd
+            for entry in sorted(pwd.getpwall(), key=lambda e: e.pw_name):
+                uid = entry.pw_uid
+                home = Path(entry.pw_dir)
+                name = entry.pw_name
+                # include root (uid=0) and regular users (uid>=1000), skip system accounts
+                if uid == 0 or uid >= 1000:
+                    candidates.append((name, home / ".openclaw" / "openclaw.json"))
+        except Exception:
+            # Fallback: scan /home/*
+            home_base = Path("/home")
+            if home_base.exists():
+                try:
+                    for user_home in sorted(home_base.iterdir()):
+                        if user_home.is_dir():
+                            candidates.append((user_home.name, user_home / ".openclaw" / "openclaw.json"))
+                except PermissionError:
+                    pass
+            candidates.append(("root", Path("/root/.openclaw/openclaw.json")))
         for username, cfg in candidates:
+            # Check if we can access the parent directory at all
+            home_dir = cfg.parent.parent  # /home/username or /root
+            home_accessible = os.access(home_dir, os.X_OK)
+            if not home_accessible:
+                # User's home dir is not accessible — still show it as locked
+                found.append({
+                    "user": username,
+                    "path": str(cfg),
+                    "readable": False,
+                    "writable": False,
+                    "exists": None,  # unknown
+                    "locked": True,
+                })
+                continue
             try:
-                if cfg.exists():
+                exists = cfg.exists()
+                if exists or cfg.parent.exists():
                     found.append({
                         "user": username,
                         "path": str(cfg),
-                        "readable": os.access(cfg, os.R_OK),
-                        "writable": os.access(cfg, os.W_OK),
+                        "readable": os.access(cfg, os.R_OK) if exists else False,
+                        "writable": os.access(cfg, os.W_OK) if exists else False,
+                        "exists": exists,
+                        "locked": False,
                     })
             except PermissionError:
-                pass
+                found.append({
+                    "user": username,
+                    "path": str(cfg),
+                    "readable": False,
+                    "writable": False,
+                    "exists": None,
+                    "locked": True,
+                })
     # Windows fallback (development) — always include the detected default
     default_str = str(CONFIG_PATH)
     if not any(u["path"] == default_str for u in found):
@@ -113,6 +152,8 @@ def discover_user_configs() -> list:
             "path": default_str,
             "readable": True,
             "writable": True,
+            "exists": True,
+            "locked": False,
         })
     return found
 
