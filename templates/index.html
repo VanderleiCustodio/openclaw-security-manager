@@ -2448,12 +2448,19 @@ function _applyThemeIcon(theme) {
 let _userMenuOpen = false;
 
 async function loadUserSelector() {
+  const label = document.getElementById('user-selector-label');
   try {
     const res = await fetch('/api/users');
+    if (!res.ok) {
+      console.error('[users] HTTP', res.status, res.statusText);
+      if (label) label.textContent = 'erro ' + res.status;
+      return;
+    }
     const data = await res.json();
     renderUserSelector(data.users, data.active);
   } catch(e) {
-    document.getElementById('user-selector-label').textContent = 'erro';
+    console.error('[users] fetch error:', e);
+    if (label) label.textContent = 'erro';
   }
 }
 
