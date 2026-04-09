@@ -2474,7 +2474,7 @@ function renderUserSelector(users, activePath) {
 
   list.innerHTML = users.map(u => {
     const isActive  = u.path === activePath;
-    const locked    = u.locked || !u.readable;
+    const locked    = u.locked === true || u.readable === false;
     const noConfig  = u.exists === false;
     const icon      = locked ? 'lock' : (noConfig ? 'file-x' : 'user');
     const clickAttr = locked ? '' : `onclick="selectUser('${u.path.replace(/'/g,"\\'")}')"`;

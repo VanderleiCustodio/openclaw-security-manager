@@ -98,7 +98,8 @@ def discover_user_configs() -> list:
                 # include root (uid=0) and regular users (uid>=1000), skip system accounts
                 if uid == 0 or uid >= 1000:
                     candidates.append((name, home / ".openclaw" / "openclaw.json"))
-        except Exception:
+        except Exception as _pwd_err:
+            app.logger.warning("pwd.getpwall() failed: %s — falling back to /home scan", _pwd_err)
             # Fallback: scan /home/*
             home_base = Path("/home")
             if home_base.exists():
@@ -118,8 +119,8 @@ def discover_user_configs() -> list:
                 found.append({
                     "user": username,
                     "path": str(cfg),
-                    "readable": os.access(cfg, os.R_OK) if exists else False,
-                    "writable": os.access(cfg, os.W_OK) if exists else False,
+                    "readable": os.access(cfg, os.R_OK) if exists else None,
+                    "writable": os.access(cfg, os.W_OK) if exists else None,
                     "exists": exists if home_accessible else None,
                     "locked": locked,
                 })
