@@ -1989,6 +1989,58 @@ function applyPreset() {
   applySection('hardened_preset', {});
 }
 
+// ---------------------------------------------------------- profiles
+async function loadProfiles() {
+  try {
+    const res = await fetch('/profiles');
+    if (!res.ok) { showToast('❌ Erro ao carregar perfis', true); return; }
+    const data = await res.json();
+    for (const [name, info] of Object.entries(data)) {
+      const badge = document.getElementById('profile-changes-' + name);
+      if (badge) badge.textContent = info.change_count + ' mudança(s)';
+    }
+  } catch(e) {
+    showToast('❌ Erro ao carregar perfis', true);
+  }
+}
+
+async function previewProfile(name) {
+  const panel = document.getElementById('profile-diff-' + name);
+  if (!panel) return;
+  try {
+    const res = await fetch('/preview-change', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({section: name + '_preset', changes: {}})
+    });
+    const data = await res.json();
+    panel.classList.add('visible');
+    if (!data.diff || data.diff.length === 0) {
+      panel.innerHTML = '<div class="diff-title">✅ Nenhuma mudança — perfil já aplicado.</div>';
+      return;
+    }
+    let html = '<div class="diff-title">Mudanças que serão aplicadas:</div>';
+    for (const d of data.diff) {
+      const before = d.before === undefined || d.before === null
+        ? '<span class="diff-empty">não definido</span>'
+        : `<span class="diff-before">${JSON.stringify(d.before)}</span>`;
+      const after = `<span class="diff-after">${JSON.stringify(d.after)}</span>`;
+      html += `<div class="diff-row">
+        <span class="diff-path">${d.path}</span>
+        ${before}<span class="diff-arrow">→</span>${after}
+      </div>`;
+    }
+    panel.innerHTML = html;
+  } catch(e) {
+    showToast('❌ Erro ao pré-visualizar perfil', true);
+  }
+}
+
+async function applyProfile(presetKey) {
+  if (!confirm('Aplicar perfil de segurança?\nUm backup será feito automaticamente.')) return;
+  applySection(presetKey, {});
+}
+
 async function runAudit(deep) {
   const out = document.getElementById('audit-output');
   out.style.display = 'block';
@@ -2160,6 +2212,7 @@ const SECTION_META = {
   'config-section':      { icon: 'file-code',      title: 'Config JSON Completo' },
   'config-diff-section': { icon: 'git-compare',    title: 'Config Diff' },
   'backups-section':     { icon: 'hard-drive',     title: 'Backups' },
+  'profiles-section':    { icon: 'layers',          title: 'Perfis de Segurança' },
 };
 
 // ── Show a single section ────────────────────────────────────
@@ -2190,6 +2243,9 @@ function showSection(id) {
 
   // persist selection
   try { sessionStorage.setItem('oc_section', id); } catch(_) {}
+
+  // auto-load section data
+  if (id === 'profiles-section') loadProfiles();
 }
 
 // ── Sidebar collapse ─────────────────────────────────────────

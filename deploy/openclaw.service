@@ -1,0 +1,26 @@
+[Unit]
+Description=OpenClaw Security Manager
+After=network.target
+
+[Service]
+# Rode como root para ter acesso de leitura às configs de todos os usuários
+User=root
+Group=root
+WorkingDirectory=/opt/openclaw
+ExecStart=/opt/openclaw/venv/bin/python app.py
+
+# Segurança: desativa debug, define secret key forte via arquivo
+Environment="FLASK_DEBUG=0"
+EnvironmentFile=/opt/openclaw/.env
+
+# Reinicia automaticamente se cair
+Restart=always
+RestartSec=5
+
+# Limita exposição do processo
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/root/.openclaw /home
+
+[Install]
+WantedBy=multi-user.target
