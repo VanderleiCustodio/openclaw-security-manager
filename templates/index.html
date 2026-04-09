@@ -2466,36 +2466,45 @@ async function loadUserSelector() {
 }
 
 function renderUserSelector(users, activePath) {
+  console.log('[users] renderUserSelector called, users:', users ? users.length : 'undefined');
   const label = document.getElementById('user-selector-label');
   const list  = document.getElementById('user-menu-list');
 
-  const activeUser = users.find(u => u.path === activePath);
-  label.textContent = activeUser ? activeUser.user : 'selecionar…';
+  if (!Array.isArray(users)) {
+    console.error('[users] users is not an array:', users);
+    if (label) label.textContent = 'erro';
+    return;
+  }
 
   list.innerHTML = users.map(u => {
     const isActive  = u.path === activePath;
     const locked    = u.locked === true || u.readable === false;
     const noConfig  = u.exists === false;
     const icon      = locked ? 'lock' : (noConfig ? 'file-x' : 'user');
-    const clickAttr = locked ? '' : `onclick="selectUser('${u.path.replace(/'/g,"\\'")}')"`;
+    const escapedPath = (u.path || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const clickAttr = locked ? '' : `onclick="selectUser('${escapedPath}')"`;
     let badge = '';
-    if (locked)   badge = '<span class="user-badge" style="background:var(--danger,#e53e3e)">sem acesso</span>';
+    if (locked)        badge = '<span class="user-badge" style="background:var(--danger,#e53e3e)">sem acesso</span>';
     else if (noConfig) badge = '<span class="user-badge">sem config</span>';
     else if (!u.writable) badge = '<span class="user-badge">somente leitura</span>';
-    const tooltip = locked
+    const tooltip = (locked
       ? `${u.user}: sem permissão (execute como root)`
-      : u.path;
+      : (u.path || '')).replace(/"/g, '&quot;');
     return `
     <div class="user-menu-item ${isActive ? 'active' : ''} ${locked ? 'no-access' : ''}"
          ${clickAttr} title="${tooltip}"
          style="${locked ? 'cursor:not-allowed;opacity:.6' : noConfig ? 'opacity:.75' : ''}">
       <i data-lucide="${icon}" style="width:13px;height:13px;flex-shrink:0;"></i>
-      <span>${u.user}</span>
+      <span>${u.user || '?'}</span>
       ${badge}
     </div>`;
   }).join('');
 
-  lucide.createIcons({ nodes: [list] });
+  const activeUser = users.find(u => u.path === activePath);
+  if (label) label.textContent = activeUser ? activeUser.user : 'selecionar…';
+
+  try { lucide.createIcons({ nodes: [list] }); } catch(e) { console.warn('[users] lucide error:', e); }
+  console.log('[users] rendered', users.length, 'users, active:', activeUser ? activeUser.user : 'none');
 }
 
 function toggleUserMenu() {
