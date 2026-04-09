@@ -254,6 +254,11 @@ def _patch_dm_pairing(changes: dict, current: dict) -> dict:
         dc.setdefault("dm", {})["policy"] = changes["discord"]
         patch["channels"]["discord"] = dc
 
+    if "teams" in changes:
+        ms = copy.deepcopy(current.get("channels", {}).get("teams", {}))
+        ms["dmPolicy"] = changes["teams"]
+        patch["channels"]["teams"] = ms
+
     return patch if patch["channels"] else {}
 
 
@@ -381,6 +386,7 @@ def _patch_hardened_preset(current: dict) -> dict:
             },
             "telegram": {"dmPolicy": "pairing"},
             "discord":  {"dm": {"policy": "pairing"}},
+            "teams":    {"dmPolicy": "pairing"},
         },
         "agents": {
             "defaults": {
@@ -414,6 +420,7 @@ def _patch_personal_preset(current: dict) -> dict:
             },
             "telegram": {"dmPolicy": "pairing"},
             "discord":  {"dm": {"policy": "pairing"}},
+            "teams":    {"dmPolicy": "pairing"},
         },
         "agents": {
             "defaults": {
@@ -480,6 +487,7 @@ def _patch_team_preset(current: dict) -> dict:
             },
             "telegram": {"dmPolicy": "allowlist"},
             "discord":  {"dm": {"policy": "allowlist"}},
+            "teams":    {"dmPolicy": "allowlist"},
         },
         "agents": {
             "defaults": {
@@ -553,6 +561,7 @@ def _patch_enterprise_preset(current: dict) -> dict:
             },
             "telegram": {"dmPolicy": "allowlist"},
             "discord":  {"dm": {"policy": "allowlist"}},
+            "teams":    {"dmPolicy": "allowlist"},
         },
         "agents": {
             "defaults": {
@@ -614,6 +623,85 @@ def _patch_enterprise_preset(current: dict) -> dict:
     }
 
 
+def _patch_devops_preset(current: dict) -> dict:
+    """DevOps profile — GitHub, GitLab, MongoDB, Azure DevOps, Docker, Kubernetes."""
+    return {
+        "gateway": {
+            "bind": "loopback",
+            "auth": {"mode": "token"},
+        },
+        "discovery": {"mdns": {"mode": "minimal"}},
+        "channels": {
+            "whatsapp": {"dmPolicy": "pairing", "groups": {"*": {"requireMention": True}}},
+            "telegram": {"dmPolicy": "pairing"},
+            "discord":  {"dm": {"policy": "pairing"}},
+            "teams":    {"dmPolicy": "pairing"},
+        },
+        "agents": {
+            "defaults": {
+                "sandbox": {
+                    "mode": "non-main",
+                    "scope": "session",
+                    "workspaceAccess": "ro",
+                },
+                "model": {"primary": "anthropic/claude-opus-4-5"},
+                "tools": {"elevated": {"enabled": False}},
+            }
+        },
+        "tools": {
+            "allow": [
+                "Read(**)",
+                "Edit(src/**)", "Edit(tests/**)", "Edit(.github/**)",
+                "Edit(.gitlab-ci.yml)", "Edit(Dockerfile)", "Edit(docker-compose*.yml)",
+                "Edit(*.tf)", "Edit(*.yaml)", "Edit(*.yml)",
+                # Git
+                "Bash(git status)", "Bash(git diff *)", "Bash(git add *)",
+                "Bash(git commit *)", "Bash(git log *)", "Bash(git checkout *)",
+                "Bash(git branch *)", "Bash(git fetch *)", "Bash(git pull *)",
+                # GitHub CLI
+                "Bash(gh pr *)", "Bash(gh issue *)", "Bash(gh repo *)",
+                "Bash(gh run *)", "Bash(gh workflow *)",
+                # GitLab CLI
+                "Bash(glab mr *)", "Bash(glab issue *)", "Bash(glab ci *)",
+                # CI/CD
+                "Bash(npm test)", "Bash(npm run *)", "Bash(npx *)",
+                "Bash(pytest *)", "Bash(python -m pytest *)",
+                # Docker (read-only)
+                "Bash(docker ps *)", "Bash(docker logs *)", "Bash(docker-compose ps)",
+                "Bash(docker-compose logs *)",
+                # Kubernetes (read-only)
+                "Bash(kubectl get *)", "Bash(kubectl describe *)", "Bash(kubectl logs *)",
+                # MongoDB
+                "Bash(mongosh --eval *)",
+                # Terraform (plan/validate only)
+                "Bash(terraform plan)", "Bash(terraform validate)", "Bash(terraform fmt *)",
+                # Azure DevOps
+                "Bash(az devops *)", "Bash(az pipelines *)",
+            ],
+            "deny": [
+                "Bash(sudo *)", "Bash(rm -rf *)",
+                "Bash(git push --force *)", "Bash(git reset --hard *)",
+                "Bash(git push origin main)", "Bash(git push origin master)",
+                "Bash(docker run *)", "Bash(docker exec *)",
+                "Bash(kubectl delete *)", "Bash(kubectl exec *)",
+                "Bash(terraform apply *)", "Bash(terraform destroy *)",
+                "Bash(az login *)",
+                "Bash(env)", "Bash(printenv)",
+                "Bash(curl *)", "Bash(wget *)", "Bash(ssh *)",
+                "Bash(npm install *)", "Bash(pip install *)",
+                "Read(**/.env)", "Read(**/.env.*)",
+                "Read(~/.aws/**)", "Read(~/.ssh/**)",
+                "Read(**/credentials*)", "Read(**/secrets*)",
+                "Read(**/*.pem)", "Read(**/*.key)",
+            ],
+        },
+        "logging": {
+            "level": "info",
+            "redactSensitive": "tools",
+        },
+    }
+
+
 PATCH_BUILDERS = {
     "dm_pairing":        _patch_dm_pairing,
     "gateway":           _patch_gateway,
@@ -625,6 +713,7 @@ PATCH_BUILDERS = {
     "personal_preset":   lambda changes, current: _patch_personal_preset(current),
     "team_preset":       lambda changes, current: _patch_team_preset(current),
     "enterprise_preset": lambda changes, current: _patch_enterprise_preset(current),
+    "devops_preset":     lambda changes, current: _patch_devops_preset(current),
 }
 
 
@@ -637,6 +726,8 @@ def build_patch(section: str, changes: dict, current: dict) -> dict:
         return _patch_team_preset(current)
     if section == "enterprise_preset":
         return _patch_enterprise_preset(current)
+    if section == "devops_preset":
+        return _patch_devops_preset(current)
     builder = PATCH_BUILDERS.get(section)
     if builder:
         return builder(changes, current)
@@ -718,6 +809,7 @@ def get_ui_state(cfg: dict) -> dict:
         "dm_pairing_whatsapp":      _get(cfg, "channels", "whatsapp", "dmPolicy",              default=""),
         "dm_pairing_telegram":      _get(cfg, "channels", "telegram", "dmPolicy",              default=""),
         "dm_pairing_discord":       _get(cfg, "channels", "discord",  "dm", "policy",          default=""),
+        "dm_pairing_teams":         _get(cfg, "channels", "teams",    "dmPolicy",              default=""),
         "group_require_mention":    _get(cfg, "channels", "whatsapp", "groups", "*", "requireMention", default=False),
         "dm_scope":                 _get(cfg, "session",  "dmScope",  default=""),
 
@@ -765,6 +857,7 @@ RECOMMENDED = {
     "dm_whatsapp":      ("DM Pairing — WhatsApp",      "channels.whatsapp.dmPolicy",              "pairing",             ["pairing", "allowlist"], "high"),
     "dm_telegram":      ("DM Pairing — Telegram",      "channels.telegram.dmPolicy",              "pairing",             ["pairing", "allowlist"], "high"),
     "dm_discord":       ("DM Pairing — Discord",       "channels.discord.dm.policy",              "pairing",             ["pairing", "allowlist"], "high"),
+    "dm_teams":         ("DM Pairing — Teams",         "channels.teams.dmPolicy",                 "pairing",             ["pairing", "allowlist"], "high"),
     "group_mention":    ("Grupos exigem @mention",     "channels.whatsapp.groups.*.requireMention","true",               ["true"], "medium"),
     "gateway_bind":     ("Gateway bind",               "gateway.bind",                            "loopback",            ["loopback", "tailnet"], "critical"),
     "gateway_auth":     ("Gateway auth mode",          "gateway.auth.mode",                       "token",               ["token", "password"], "critical"),
@@ -806,6 +899,7 @@ def build_status(cfg: dict) -> list:
         "dm_whatsapp":   str(_get(cfg, "channels", "whatsapp", "dmPolicy",              default="")),
         "dm_telegram":   str(_get(cfg, "channels", "telegram", "dmPolicy",              default="")),
         "dm_discord":    str(_get(cfg, "channels", "discord",  "dm", "policy",          default="")),
+        "dm_teams":      str(_get(cfg, "channels", "teams",    "dmPolicy",              default="")),
         "group_mention": str(_get(cfg, "channels", "whatsapp", "groups", "*", "requireMention", default="")).lower(),
         "gateway_bind":  str(_get(cfg, "gateway", "bind",       default="")),
         "gateway_auth":  str(_get(cfg, "gateway", "auth", "mode", default="")),
@@ -1464,6 +1558,7 @@ def profiles():
         ("personal",   "personal_preset"),
         ("team",       "team_preset"),
         ("enterprise", "enterprise_preset"),
+        ("devops",     "devops_preset"),
     ]:
         patch = build_patch(builder_key, {}, cfg)
         after = deep_merge(cfg, patch)

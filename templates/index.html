@@ -383,6 +383,7 @@
     .value-badge { display:inline-block; font-size:11px; padding:2px 7px; border-radius:var(--r1); font-family:var(--mono); background:var(--s3); color:var(--t3); }
     .value-badge.empty { background:var(--red-dim); color:var(--red); }
     .value-badge.set   { background:var(--green-dim); color:var(--green); }
+    .badge-priority { display:inline-block; font-size:10px; padding:1px 6px; border-radius:var(--r1); background:var(--blue-dim,#1e3a5f); color:var(--blue,#60a5fa); font-weight:600; margin-left:6px; vertical-align:middle; }
 
     /* ── Buttons ──────────────────────────────────────────────── */
     button {
@@ -1069,6 +1070,20 @@ loadGatewayErrors();
         <option value="disabled" {% if state.dm_pairing_discord == 'disabled' %}selected{% endif %}>disabled</option>
       </select>
       <div class="hint">Valor atual: <span class="value-badge {% if state.dm_pairing_discord %}set{% else %}empty{% endif %}">{{ state.dm_pairing_discord or 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Microsoft Teams — DM Policy <span class="badge-priority">prioritário</span></label>
+    <div>
+      <select id="dm_teams" onchange="markWarn(this, 'open')">
+        <option value="" disabled {% if not state.dm_pairing_teams %}selected{% endif %}>— não configurado —</option>
+        <option value="pairing"  {% if state.dm_pairing_teams == 'pairing'  %}selected{% endif %}>pairing  (recomendado)</option>
+        <option value="allowlist"{% if state.dm_pairing_teams == 'allowlist'%}selected{% endif %}>allowlist</option>
+        <option value="open"     {% if state.dm_pairing_teams == 'open'     %}selected{% endif %}>open ⚠️</option>
+        <option value="disabled" {% if state.dm_pairing_teams == 'disabled' %}selected{% endif %}>disabled</option>
+      </select>
+      <div class="hint">Valor atual: <span class="value-badge {% if state.dm_pairing_teams %}set{% else %}empty{% endif %}">{{ state.dm_pairing_teams or 'não definido' }}</span></div>
     </div>
   </div>
 
@@ -1804,6 +1819,27 @@ nono run --profile openclaw -- openclaw gateway</pre>
       <div class="profile-diff-panel" id="profile-diff-enterprise"></div>
     </div>
 
+    <!-- DevOps -->
+    <div class="profile-card" id="profile-card-devops">
+      <div class="profile-card-header">
+        <span class="profile-card-icon">⚙️</span>
+        <span class="profile-card-title">DevOps</span>
+      </div>
+      <div class="profile-card-desc">
+        Perfil para desenvolvedores com GitHub, GitLab, MongoDB, Azure DevOps, Docker e Kubernetes.<br>
+        Balanceia produtividade com segurança — acesso controlado a CI/CD e infraestrutura.
+      </div>
+      <div class="profile-card-meta">
+        <span class="profile-changes-badge" id="profile-changes-devops">— mudanças</span>
+        <span class="profile-level-badge" style="background:var(--blue-dim,#1e3a5f);color:var(--blue,#60a5fa)">DevOps</span>
+      </div>
+      <div class="profile-card-actions">
+        <button class="btn-preview" onclick="previewProfile('devops')">👁 Pré-visualizar</button>
+        <button class="btn-apply"   onclick="applyProfile('devops_preset')">Aplicar</button>
+      </div>
+      <div class="profile-diff-panel" id="profile-diff-devops"></div>
+    </div>
+
   </div>
 </div>
 
@@ -1853,6 +1889,7 @@ function getDmChanges() {
   const wa = val('dm_whatsapp'); if (wa) c.whatsapp = wa;
   const tg = val('dm_telegram'); if (tg) c.telegram = tg;
   const dc = val('dm_discord');  if (dc) c.discord  = dc;
+  const ms = val('dm_teams');    if (ms) c.teams    = ms;
   c.group_mention = chk('group_mention');
   return c;
 }
