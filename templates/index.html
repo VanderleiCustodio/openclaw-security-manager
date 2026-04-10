@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="light">
+<html lang="pt-BR" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <title>OpenClaw Security Manager</title>
@@ -21,21 +21,22 @@
       --term-fg: #C9D1D9;
 
       /* Sidebar — always dark navy, never changes with theme */
-      --sb-bg:      #1B2431;
-      --sb-active:  #273142;
-      --sb-hover:   #1F2D3D;
-      --sb-border:  rgba(255,255,255,.06);
+      --sb-bg:      #000000;
+      --sb-active:  rgba(139,92,246,.15);
+      --sb-hover:   rgba(255,255,255,.05);
+      --sb-border:  rgba(255,255,255,.05);
       --sb-group:   #3D5166;
       --sb-text:    #8A9BB0;
       --sb-text-hi: #C8D8E8;
       --sb-logo:    #FFFFFF;
+      --sb-accent:  #8B5CF6;
 
       /* Accent — always blue, independent of theme */
-      --accent:     #4361EE;
-      --accent-h:   #3451D1;
-      --accent-dim: rgba(67,97,238,.12);
-      --accent-ring:rgba(67,97,238,.30);
-      --accent-sh:  0 2px 8px rgba(67,97,238,.35);
+      --accent:     #8B5CF6;
+      --accent-h:   #7C3AED;
+      --accent-dim: rgba(139,92,246,.15);
+      --accent-ring:rgba(139,92,246,.35);
+      --accent-sh:  0 4px 20px rgba(139,92,246,.4);
     }
 
     /* ── Light theme (default) ─────────────────────────────────── */
@@ -65,36 +66,40 @@
       --sh2: 0 4px 16px rgba(0,0,0,.10);
     }
 
+    /* color-scheme só no elemento com data-theme — não usar :root aqui */
+    [data-theme="light"] { color-scheme: light; }
+
     /* ── Dark theme ────────────────────────────────────────────── */
     [data-theme="dark"] {
-      --bg:  #111827;
-      --s1:  #1E2A3B;
-      --s2:  #273142;
-      --s3:  #2D3A4D;
-      --b1:  #2D3F56;
-      --b2:  #3D5166;
+      color-scheme: dark;
+      --bg:  #000000;
+      --s1:  rgba(255,255,255,0.04);
+      --s2:  rgba(255,255,255,0.06);
+      --s3:  rgba(255,255,255,0.08);
+      --b1:  transparent;
+      --b2:  transparent;
       --a:       var(--accent);
       --a-dim:   var(--accent-dim);
       --a-ring:  var(--accent-ring);
       --a-deep:  var(--accent);
-      --a-light: #7B93F5;
-      --t1: #F0F4FF;
-      --t2: #C8D8E8;
-      --t3: #8A9BB0;
-      --t4: #5A6A7E;
+      --a-light: #a78bfa;
+      --t1: #FFFFFF;
+      --t2: #D1D5DB;
+      --t3: #9CA3AF;
+      --t4: #6B7280;
       --green:     #22C55E;
-      --green-dim: rgba(34,197,94,.12);
+      --green-dim: rgba(34,197,94,.15);
       --amber:     #F59E0B;
-      --amber-dim: rgba(245,158,11,.12);
-      --red:       #F87171;
-      --red-dim:   rgba(248,113,113,.12);
-      --sh1: 0 1px 3px rgba(0,0,0,.4);
-      --sh2: 0 4px 16px rgba(0,0,0,.5);
+      --amber-dim: rgba(245,158,11,.15);
+      --red:       #EF4444;
+      --red-dim:   rgba(239,68,68,.15);
+      --sh1: 0 8px 32px rgba(0,0,0,.6);
+      --sh2: 0 16px 48px rgba(0,0,0,.8);
     }
 
     /* ── Reset & base ──────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { color-scheme: light dark; }
+    /* color-scheme vem do tema em html[data-theme] — evita <select> nativo claro no Windows */
     body { font-family: var(--font); font-size: 14px; background: var(--bg); color: var(--t1); line-height: 1.5; letter-spacing: -.01em; }
     ::selection { background: var(--accent-dim); color: var(--t1); }
     ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -102,16 +107,53 @@
     ::-webkit-scrollbar-thumb { background: var(--b1); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--b2); }
 
+    /* ── Black Blur Pro Overrides ─────────────────────────── */
+    body { background: #000000 !important; }
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: -1;
+      background: radial-gradient(800px at 20% -10%, rgba(139,92,246,.15), transparent 60%),
+                  radial-gradient(600px at 90% 10%, rgba(59,130,246,.12), transparent 50%),
+                  #000;
+    }
+    .card, .panel, .metric-card, .profile-card, [class*="card"] {
+      background: var(--s1) !important;
+      backdrop-filter: blur(24px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+      border: 1px solid rgba(255,255,255,.06) !important;
+      border-radius: 20px !important;
+      box-shadow: var(--sh1) !important;
+      transition: transform .3s cubic-bezier(.2,.8,.2,1), box-shadow .3s, border-color .3s !important;
+    }
+    .card:hover, .panel:hover, .metric-card:hover, .profile-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--sh2), 0 0 0 1px rgba(139,92,246,.2) !important;
+      border-color: rgba(139,92,246,.3) !important;
+    }
+    .sidebar-logo, .form-row, .section-header { border-color: rgba(255,255,255,.06) !important; }
+
+    @keyframes fadeInUp { from { opacity:0; transform: translateY(12px) } to { opacity:1; transform: translateY(0) } }
+    @keyframes scaleIn { from { opacity:0; transform: scale(.96) } to { opacity:1; transform: scale(1) } }
+    .main-content > * { animation: fadeInUp .5s cubic-bezier(.2,.8,.2,1) both; }
+    .card, .panel { animation: scaleIn .4s cubic-bezier(.2,.8,.2,1) both; }
+    .card:nth-child(1){animation-delay:.05s} .card:nth-child(2){animation-delay:.1s}
+    .card:nth-child(3){animation-delay:.15s} .card:nth-child(4){animation-delay:.2s}
+
+    .btn, button { transition: all .2s cubic-bezier(.2,.8,.2,1) !important; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn-primary { background: linear-gradient(135deg, #8B5CF6, #EC4899) !important; box-shadow: 0 4px 20px rgba(139,92,246,.35) !important; border: none !important; }
+
     /* ── Layout ───────────────────────────────────────────────── */
     .layout { display: flex; min-height: 100vh; }
 
     /* ── Sidebar — always dark navy, never follows content theme ── */
     .sidebar {
-      width: var(--sw); background: var(--sb-bg);
-      border-right: 1px solid var(--sb-border);
+      width: var(--sw); background: rgba(0,0,0.8);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-right: 1px solid rgba(255,255,255,.05);
       position: fixed; top:0; left:0; bottom:0;
       display:flex; flex-direction:column; z-index:100;
-      transition: width .2s ease; overflow:hidden;
+      transition: width .3s cubic-bezier(.2,.8,.2,1); overflow:hidden;
     }
     .sidebar.collapsed { width: var(--swc); }
 
@@ -366,7 +408,19 @@
     }
     select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23A0AEC0'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position: right 10px center; padding-right: 28px; }
     select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
-    select option { background: var(--s2); }
+    select option { background: var(--s2); color: var(--t1); }
+    /* Tema escuro: listas nativas + fundo sólido (rgba transparente vira “branco” no Win/Chrome) */
+    [data-theme="dark"] select {
+      background-color: #141418;
+      color: var(--t1);
+      border-color: rgba(255,255,255,.14);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23D1D5DB'/%3E%3C/svg%3E");
+    }
+    [data-theme="dark"] select option,
+    [data-theme="dark"] select optgroup {
+      background-color: #1c1c24;
+      color: #f3f4f6;
+    }
     select.warn { border-color: var(--amber); box-shadow: 0 0 0 2px var(--amber-dim); }
     select.ok   { border-color: var(--green); }
     input[type="checkbox"] { display: none; }
@@ -791,6 +845,12 @@
         <span class="nav-badge">10</span>
       </a>
 
+      <a class="nav-item" onclick="showSection('session-section')" data-section="session-section">
+        <span class="nav-icon"><i data-lucide="clock"></i></span>
+        <span class="nav-label">Sessão</span>
+        <span class="nav-badge">11</span>
+      </a>
+
       <div class="sidebar-group">Dados</div>
       <a class="nav-item" onclick="showSection('config-section')" data-section="config-section">
         <span class="nav-icon"><i data-lucide="file-code"></i></span>
@@ -799,6 +859,10 @@
       <a class="nav-item" onclick="showSection('config-diff-section')" data-section="config-diff-section">
         <span class="nav-icon"><i data-lucide="git-compare"></i></span>
         <span class="nav-label">Config Diff</span>
+      </a>
+      <a class="nav-item" onclick="showSection('identity-section')" data-section="identity-section">
+        <span class="nav-icon"><i data-lucide="shield-check"></i></span>
+        <span class="nav-label">12. Identidade do Agente</span>
       </a>
       <a class="nav-item" onclick="showSection('backups-section')" data-section="backups-section">
         <span class="nav-icon"><i data-lucide="hard-drive"></i></span>
@@ -1467,6 +1531,70 @@ loadGatewayErrors();
   </div>
 </div>
 
+<!-- ============================================================ SESSION -->
+<div class="section" id="session-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="clock"></i></span>
+    <h2>11. Sessão — Persistência</h2>
+  </div>
+  <p class="hint">No OpenClaw, <code>session.reset.mode</code> só aceita <strong>daily</strong> ou <strong>idle</strong>. Para a conversa <strong>não ser encerrada por tempo</strong>, use <strong>idle</strong> com <code>idleMinutes</code> muito alto (ex.: 9999999 ≈ anos sem mensagens). <code>daily</code> reinicia todo dia na hora configurada.</p>
+
+  {% set session_reset_ok = not state.session_reset_mode or state.session_reset_mode in ('daily', 'idle') %}
+  <div class="row">
+    <label>session.reset.mode</label>
+    <div>
+      <select id="session_reset_mode">
+        {% if not session_reset_ok %}
+        <option disabled selected value="">{{ state.session_reset_mode }} — inválido no OpenClaw (escolha daily ou idle abaixo)</option>
+        {% endif %}
+        <option value="" disabled {% if session_reset_ok and not state.session_reset_mode %}selected{% endif %}>— não configurado —</option>
+        <option value="daily"  {% if state.session_reset_mode == 'daily'  %}selected{% endif %}>daily (reset diário às N horas)</option>
+        <option value="idle"   {% if state.session_reset_mode == 'idle'   %}selected{% endif %}>idle (só após inatividade — use idleMinutes alto para “nunca”)</option>
+      </select>
+      <div class="hint">Valor no arquivo: <span class="value-badge {% if state.session_reset_mode %}set{% else %}empty{% endif %}">{{ state.session_reset_mode or 'não definido' }}</span></div>
+      {% if not session_reset_ok %}
+      <p class="hint" style="color:var(--amber);margin-top:6px">O gateway só aceita <code>daily</code> ou <code>idle</code>. Selecione um modo válido e clique em Aplicar para corrigir.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row">
+    <label>session.reset.atHour</label>
+    <div>
+      <input type="number" id="session_reset_at_hour" min="0" max="23" placeholder="ex: 4"
+             value="{{ state.session_reset_at_hour if state.session_reset_at_hour != '' else '' }}" style="width:100px">
+      <div class="hint">Usado apenas com <strong>daily</strong> (hora local 0–23). Com <strong>idle</strong> o gateway ignora e o painel remove esta chave ao aplicar. Valor atual: <span class="value-badge {% if state.session_reset_at_hour != '' %}set{% else %}empty{% endif %}">{{ state.session_reset_at_hour if state.session_reset_at_hour != '' else 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>session.idleMinutes</label>
+    <div>
+      <input type="number" id="session_idle_minutes" min="0" placeholder="ex: 9999999 — persistência máxima"
+             value="{{ state.session_idle_minutes if state.session_idle_minutes != '' else '' }}" style="width:200px">
+      <div class="hint">Minutos sem atividade antes de nova sessão (modo <strong>idle</strong>). Valores muito altos evitam reset prático. Vazio = remove o campo do JSON. Valor atual: <span class="value-badge {% if state.session_idle_minutes != '' %}set{% else %}empty{% endif %}">{{ state.session_idle_minutes if state.session_idle_minutes != '' else 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>agents.defaults.compaction.memoryFlush.enabled</label>
+    <div>
+      <select id="memory_flush_enabled">
+        <option value="" disabled {% if state.memory_flush_enabled == '' %}selected{% endif %}>— não configurado —</option>
+        <option value="true"  {% if state.memory_flush_enabled in (True, 'true', 'True') %}selected{% endif %}>true (flush antes da compactação)</option>
+        <option value="false" {% if state.memory_flush_enabled in (False, 'false', 'False') %}selected{% endif %}>false</option>
+      </select>
+      <div class="hint">Persiste contexto de memória antes da compactação. Requer workspaceAccess = rw. Valor atual: <span class="value-badge {% if state.memory_flush_enabled != '' %}set{% else %}empty{% endif %}">{{ state.memory_flush_enabled if state.memory_flush_enabled != '' else 'não definido' }}</span></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-preview" onclick="previewSection('session', getSessionChanges())">👁 Preview</button>
+    <button class="btn-apply"   onclick="applySection('session',   getSessionChanges())">Aplicar</button>
+  </div>
+  <div class="diff-panel" id="diff-session"></div>
+</div>
+
 <!-- ============================================================ PERMISSIONS -->
 <div class="section" id="permissions-section">
   <div class="section-header">
@@ -1988,6 +2116,16 @@ function getModelChanges() {
   return c;
 }
 
+function getSessionChanges() {
+  const c = {};
+  const mode = val('session_reset_mode');                        if (mode) c.reset_mode = mode;
+  const hour = document.getElementById('session_reset_at_hour')?.value?.trim();
+  if (hour) c.reset_at_hour = hour;
+  const idle = document.getElementById('session_idle_minutes')?.value?.trim();  if (idle !== undefined) c.idle_minutes = idle;
+  const flush = val('memory_flush_enabled');                     if (flush) c.memory_flush_enabled = flush === 'true';
+  return c;
+}
+
 // ---------------------------------------------------------- diff render
 function renderDiff(panelId, diff) {
   const panel = document.getElementById('diff-' + panelId);
@@ -2439,6 +2577,7 @@ const SECTION_META = {
   'audit-section':       { icon: 'search',         title: 'Security Audit' },
   'nono-section':        { icon: 'server',         title: 'nono — Sandbox de Kernel' },
   'plugins-section':     { icon: 'puzzle',          title: 'Plugins' },
+  'session-section':     { icon: 'clock',           title: 'Sessão — Persistência' },
   'config-section':      { icon: 'file-code',      title: 'Config JSON Completo' },
   'config-diff-section': { icon: 'git-compare',    title: 'Config Diff' },
   'backups-section':     { icon: 'hard-drive',     title: 'Backups' },
@@ -2647,7 +2786,7 @@ let _userMenuOpen = false;
   let savedTheme;
   try { savedTheme = localStorage.getItem('oc_theme'); } catch(_) {}
   if (!savedTheme) {
-    savedTheme = 'light'; // DashStack default: light content, always-dark sidebar
+    savedTheme = 'dark'; // Black Blur Pro
   }
   document.documentElement.setAttribute('data-theme', savedTheme);
 

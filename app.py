@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import shutil
@@ -102,6 +103,10 @@ CONFIG_PATH = detect_config_path()
 OPENCLAW_DIR = CONFIG_PATH.parent
 BACKUP_DIR = OPENCLAW_DIR / "backups"
 PAIRINGS_PATH = OPENCLAW_DIR / "pairings.json"
+
+# OpenClaw só aceita session.reset.mode = daily | idle. Para não reiniciar por inatividade
+# de forma prática, use idle + idleMinutes muito alto (anos sem conversa).
+OPENCLAW_SESSION_IDLE_MINUTES_PRACTICALLY_NEVER = 9_999_999
 
 
 # ---------------------------------------------------------------------------
@@ -352,14 +357,10 @@ def _patch_tools(changes: dict, current: dict) -> dict:
         if "deny" in changes and changes["deny"].strip():
             tools["deny"] = [t.strip() for t in changes["deny"].split(",") if t.strip()]
 
-    # Elevated tool settings live under agents.defaults.tools.elevated
     if "elevated_enabled" in changes:
-        elev = agents.setdefault("defaults", {}).setdefault("tools", {}).setdefault("elevated", {})
-        elev["enabled"] = changes["elevated_enabled"]
-    if "elevated_allow_from" in changes:
-        elev = agents.setdefault("defaults", {}).setdefault("tools", {}).setdefault("elevated", {})
-        raw = changes["elevated_allow_from"]
-        elev["allowFrom"] = [s.strip() for s in (raw if isinstance(raw, list) else raw.split(",")) if s.strip()]
+        tools.setdefault("elevated", {})["enabled"] = changes["elevated_enabled"]
+    # allowFrom is NOT written — schema expects a record type and the field
+    # is only set by openclaw itself; writing an array causes validation errors.
 
     patch = {"tools": tools}
     if agents:
@@ -397,14 +398,40 @@ def _patch_logging(changes: dict, current: dict) -> dict:
 
 def _patch_model(changes: dict, current: dict) -> dict:
     agents = copy.deepcopy(current.get("agents", {}))
-    model = agents.setdefault("defaults", {}).setdefault("model", {})
 
     if "primary" in changes and changes["primary"].strip():
-        model["primary"] = changes["primary"].strip()
-    if "fallback" in changes and changes["fallback"].strip():
-        model["fallback"] = changes["fallback"].strip()
+        agents.setdefault("defaults", {})["model"] = changes["primary"].strip()
 
     return {"agents": agents}
+
+
+def _patch_session(changes: dict, current: dict) -> dict:
+    session = copy.deepcopy(current.get("session", {}))
+    agents = copy.deepcopy(current.get("agents", {}))
+
+    if "reset_mode" in changes:
+        reset = session.setdefault("reset", {})
+        reset["mode"] = changes["reset_mode"]
+        # idle não usa horário de calendário; evita chave órfã no JSON
+        if changes["reset_mode"] == "idle":
+            reset.pop("atHour", None)
+    if "reset_at_hour" in changes and str(changes["reset_at_hour"]).strip():
+        session.setdefault("reset", {})["atHour"] = int(changes["reset_at_hour"])
+    if "idle_minutes" in changes:
+        if str(changes["idle_minutes"]).strip():
+            session["idleMinutes"] = int(changes["idle_minutes"])
+        else:
+            session.pop("idleMinutes", None)
+    if "memory_flush_enabled" in changes:
+        mf = agents.setdefault("defaults", {}).setdefault("compaction", {}).setdefault("memoryFlush", {})
+        mf["enabled"] = changes["memory_flush_enabled"]
+
+    patch = {}
+    if session:
+        patch["session"] = session
+    if agents:
+        patch["agents"] = agents
+    return patch
 
 
 def _patch_hardened_preset(current: dict) -> dict:
@@ -432,12 +459,19 @@ def _patch_hardened_preset(current: dict) -> dict:
                     "scope": "session",
                     "workspaceAccess": "none",
                 },
-                "model": {"primary": "anthropic/claude-opus-4-5"},
+                "model": "anthropic/claude-opus-4-5",
             }
+        },
+        "tools": {
+            "elevated": {"enabled": False},
         },
         "logging": {
             "level": "info",
             "redactSensitive": "tools",
+        },
+        "session": {
+            "reset": {"mode": "idle"},
+            "idleMinutes": OPENCLAW_SESSION_IDLE_MINUTES_PRACTICALLY_NEVER,
         },
     }
 
@@ -466,14 +500,14 @@ def _patch_personal_preset(current: dict) -> dict:
                     "scope": "session",
                     "workspaceAccess": "ro",
                 },
-                "model": {"primary": "anthropic/claude-opus-4-5"},
-                "tools": {
-                    "elevated": {"enabled": False},
-                },
+                "model": "anthropic/claude-opus-4-5",
             }
         },
         "plugins": {"deny": []},
-        "session": {"dmScope": "contacts"},
+        "session": {
+            "reset": {"mode": "idle"},
+            "idleMinutes": OPENCLAW_SESSION_IDLE_MINUTES_PRACTICALLY_NEVER,
+        },
         "logging": {
             "level": "info",
             "redactSensitive": "tools",
@@ -491,12 +525,12 @@ def _patch_team_preset(current: dict) -> dict:
         "discovery": {"mdns": {"mode": "off"}},
         "channels": {
             "whatsapp": {
-                "dmPolicy": "allowlist",
+                "dmPolicy": "pairing",
                 "groups": {"*": {"requireMention": True}},
             },
-            "telegram": {"dmPolicy": "allowlist"},
-            "discord":  {"dm": {"policy": "allowlist"}},
-            "msteams":  {"dmPolicy": "allowlist"},
+            "telegram": {"dmPolicy": "pairing"},
+            "discord":  {"dm": {"policy": "pairing"}},
+            "msteams":  {"dmPolicy": "pairing"},
         },
         "agents": {
             "defaults": {
@@ -505,20 +539,19 @@ def _patch_team_preset(current: dict) -> dict:
                     "scope": "agent",
                     "workspaceAccess": "none",
                 },
-                "model": {"primary": "anthropic/claude-opus-4-5"},
-                "tools": {
-                    "elevated": {"enabled": False},
-                },
+                "model": "anthropic/claude-opus-4-5",
             }
         },
-        "plugins": {
-            "allow": [],
-            "deny": ["*"],
+        "tools": {
+            "elevated": {"enabled": False},
         },
-        "session": {"dmScope": "contacts"},
+        "session": {
+            "reset": {"mode": "idle"},
+            "idleMinutes": OPENCLAW_SESSION_IDLE_MINUTES_PRACTICALLY_NEVER,
+        },
         "logging": {
             "level": "info",
-            "redactSensitive": "all",
+            "redactSensitive": "tools",
         },
     }
 
@@ -533,12 +566,12 @@ def _patch_enterprise_preset(current: dict) -> dict:
         "discovery": {"mdns": {"mode": "off"}},
         "channels": {
             "whatsapp": {
-                "dmPolicy": "allowlist",
+                "dmPolicy": "pairing",
                 "groups": {"*": {"requireMention": True}},
             },
-            "telegram": {"dmPolicy": "allowlist"},
-            "discord":  {"dm": {"policy": "allowlist"}},
-            "msteams":  {"dmPolicy": "allowlist"},
+            "telegram": {"dmPolicy": "pairing"},
+            "discord":  {"dm": {"policy": "pairing"}},
+            "msteams":  {"dmPolicy": "pairing"},
         },
         "agents": {
             "defaults": {
@@ -547,23 +580,19 @@ def _patch_enterprise_preset(current: dict) -> dict:
                     "scope": "agent",
                     "workspaceAccess": "none",
                 },
-                "model": {"primary": "anthropic/claude-opus-4-5"},
-                "tools": {
-                    "elevated": {
-                        "enabled": False,
-                        "allowFrom": [],
-                    },
-                },
+                "model": "anthropic/claude-opus-4-5",
             }
         },
-        "plugins": {
-            "allow": [],
-            "deny": ["*"],
+        "tools": {
+            "elevated": {"enabled": False},
         },
-        "session": {"dmScope": "none"},
+        "session": {
+            "reset": {"mode": "idle"},
+            "idleMinutes": OPENCLAW_SESSION_IDLE_MINUTES_PRACTICALLY_NEVER,
+        },
         "logging": {
             "level": "warn",
-            "redactSensitive": "all",
+            "redactSensitive": "tools",
             "consoleLevel": "error",
         },
     }
@@ -590,12 +619,14 @@ def _patch_devops_preset(current: dict) -> dict:
                     "scope": "session",
                     "workspaceAccess": "ro",
                 },
-                "model": {"primary": "anthropic/claude-opus-4-5"},
-                "tools": {"elevated": {"enabled": False}},
+                "model": "anthropic/claude-opus-4-5",
             }
         },
         "plugins": {"deny": []},
-        "session": {"dmScope": "contacts"},
+        "session": {
+            "reset": {"mode": "idle"},
+            "idleMinutes": OPENCLAW_SESSION_IDLE_MINUTES_PRACTICALLY_NEVER,
+        },
         "logging": {
             "level": "info",
             "redactSensitive": "tools",
@@ -611,6 +642,7 @@ PATCH_BUILDERS = {
     "plugins":           _patch_plugins,
     "logging":           _patch_logging,
     "model":             _patch_model,
+    "session":           _patch_session,
     "personal_preset":   lambda changes, current: _patch_personal_preset(current),
     "team_preset":       lambda changes, current: _patch_team_preset(current),
     "enterprise_preset": lambda changes, current: _patch_enterprise_preset(current),
@@ -705,7 +737,6 @@ def _get(d, *keys, default=None):
 
 
 def get_ui_state(cfg: dict) -> dict:
-    elev = _get(cfg, "agents", "defaults", "tools", "elevated", "enabled", default="")
     return {
         "dm_pairing_whatsapp":      _get(cfg, "channels", "whatsapp", "dmPolicy",              default=""),
         "dm_pairing_telegram":      _get(cfg, "channels", "telegram", "dmPolicy",              default=""),
@@ -727,11 +758,11 @@ def get_ui_state(cfg: dict) -> dict:
         "tools_allow":      ", ".join(_get(cfg, "tools", "allow", default=[]) or []),
         "tools_deny":       ", ".join(_get(cfg, "tools", "deny",  default=[]) or []),
 
-        "elevated_enabled":    elev,
-        "elevated_allow_from": ", ".join(_get(cfg, "agents", "defaults", "tools", "elevated", "allowFrom", default=[]) or []),
+        "elevated_enabled":    _get(cfg, "tools", "elevated", "enabled", default=""),
+        "elevated_allow_from": "",  # allowFrom is a record type managed by openclaw, not editable here
 
-        "plugins_allow": ", ".join(_get(cfg, "plugins", "allow", default=[]) or []),
-        "plugins_deny":  ", ".join(_get(cfg, "plugins", "deny",  default=[]) or []),
+        "plugins_allow": _get(cfg, "plugins", "allow", default=[]) or [],
+        "plugins_deny":  _get(cfg, "plugins", "deny",  default=[]) or [],
 
         "log_level":         _get(cfg, "logging", "level",           default=""),
         "log_redact":        _get(cfg, "logging", "redactSensitive", default=""),
@@ -739,12 +770,17 @@ def get_ui_state(cfg: dict) -> dict:
         "log_console_level": _get(cfg, "logging", "consoleLevel",    default=""),
         "log_console_style": _get(cfg, "logging", "consoleStyle",    default=""),
 
-        "model_primary":  _get(cfg, "agents", "defaults", "model", "primary",  default=""),
-        "model_fallback": _get(cfg, "agents", "defaults", "model", "fallback", default=""),
+        "model_primary":  _get(cfg, "agents", "defaults", "model", default=""),
+        "model_fallback": "",
 
         "permissions":   check_permissions(),
         "config_path":   str(CONFIG_PATH),
         "config_exists": CONFIG_PATH.exists(),
+
+        "session_reset_mode":    _get(cfg, "session", "reset", "mode",    default=""),
+        "session_reset_at_hour": _get(cfg, "session", "reset", "atHour",  default=""),
+        "session_idle_minutes":  _get(cfg, "session", "idleMinutes",       default=""),
+        "memory_flush_enabled":  _get(cfg, "agents", "defaults", "compaction", "memoryFlush", "enabled", default=""),
     }
 
 
@@ -767,8 +803,8 @@ RECOMMENDED = {
     "sandbox_scope":    ("Sandbox scope",              "agents.defaults.sandbox.scope",           "session",             ["session", "agent"], "medium"),
     "sandbox_ws":       ("Sandbox workspaceAccess",    "agents.defaults.sandbox.workspaceAccess", "none",                ["none", "ro"], "high"),
     "log_level":        ("Log level",                  "logging.level",                           "info",                ["info", "debug"], "low"),
-    "log_redact":       ("Log redactSensitive",        "logging.redactSensitive",                 "tools",               ["tools", "all"], "high"),
-    "model":            ("Modelo principal",           "agents.defaults.model.primary",           "anthropic/claude-opus-4-5", [], "medium"),
+    "log_redact":       ("Log redactSensitive",        "logging.redactSensitive",                 "tools",               ["tools"], "high"),
+    "model":            ("Modelo principal",           "agents.defaults.model",                   "anthropic/claude-opus-4-5", [], "medium"),
     "perm_dir":         ("Permissão ~/.openclaw",      "filesystem",                              "0o700",               [], "high"),
     "perm_cfg":         ("Permissão openclaw.json",    "filesystem",                              "0o600",               [], "high"),
     # New items from security guide
@@ -777,11 +813,14 @@ RECOMMENDED = {
     "tools_deny_env":   ("Deny Bash(env/printenv)",    "tools.deny",                              "<set>",               [], "high"),
     "tools_deny_env_files": ("Deny Read(.env files)", "tools.deny",                              "<set>",               [], "high"),
     "tools_deny_secrets":   ("Deny Read(.aws/.ssh)",   "tools.deny",                              "<set>",               [], "critical"),
-    "elevated_disabled": ("Elevated tools desabilitado", "agents.defaults.tools.elevated.enabled", "false",             ["false", "False"], "high"),
+    "elevated_disabled": ("Elevated tools desabilitado", "tools.elevated.enabled",                 "false",             ["false", "False"], "high"),
     # Missing checks from security guide
     "plugins_deny":     ("Plugins bloqueados",           "plugins.deny",           "<non-empty>", [],                       "high"),
     "log_console_level":("Log consoleLevel",             "logging.consoleLevel",   "warn",        ["warn", "error"],        "low"),
-    "dm_scope":         ("DM scope (session)",           "session.dmScope",        "contacts",    ["contacts", "none"],     "medium"),
+    "dm_scope":         ("DM scope (session)",           "session.dmScope",        "per-peer",    ["per-peer", "per-channel-peer", "per-account-channel-peer", "main"], "medium"),
+    # Session persistence
+    "session_reset_mode":   ("Session reset mode",        "session.reset.mode",                             "idle",   ["daily", "idle"], "low"),
+    "memory_flush_enabled": ("Memory flush (compaction)", "agents.defaults.compaction.memoryFlush.enabled", "true",   ["true", "True"],              "low"),
 }
 
 RISK_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -797,7 +836,6 @@ def _tools_deny_contains(cfg: dict, *keywords) -> bool:
 def build_status(cfg: dict) -> list:
     perms = check_permissions()
     token = _get(cfg, "gateway", "auth", "token", default="")
-    elevated_enabled = _get(cfg, "agents", "defaults", "tools", "elevated", "enabled", default=None)
 
     raw = {
         "dm_whatsapp":   str(_get(cfg, "channels", "whatsapp", "dmPolicy",              default="")),
@@ -814,7 +852,7 @@ def build_status(cfg: dict) -> list:
         "sandbox_ws":    str(_get(cfg, "agents", "defaults", "sandbox", "workspaceAccess", default="")),
         "log_level":     str(_get(cfg, "logging", "level",           default="")),
         "log_redact":    str(_get(cfg, "logging", "redactSensitive", default="")),
-        "model":         str(_get(cfg, "agents", "defaults", "model", "primary", default="")),
+        "model":         str(_get(cfg, "agents", "defaults", "model", default="")),
         # On Windows permissions are N/A — treat as "ok" to avoid false alerts
         "perm_dir":      "N/A" if perms.get("dir", {}).get("na") else (perms.get("dir", {}).get("current") or ""),
         "perm_cfg":      "N/A" if perms.get("config", {}).get("na") else (perms.get("config", {}).get("current") or ""),
@@ -824,11 +862,14 @@ def build_status(cfg: dict) -> list:
         "tools_deny_env":       "<set>" if _tools_deny_contains(cfg, "printenv", "bash(env)") else "",
         "tools_deny_env_files": "<set>" if _tools_deny_contains(cfg, ".env") else "",
         "tools_deny_secrets":   "<set>" if _tools_deny_contains(cfg, ".aws", ".ssh") else "",
-        "elevated_disabled":    "false" if elevated_enabled is False else (str(elevated_enabled).lower() if elevated_enabled is not None else ""),
+        "elevated_disabled":    str(_get(cfg, "tools", "elevated", "enabled", default="")).lower(),
         # New missing checks
         "plugins_deny":      "<non-empty>" if (_get(cfg, "plugins", "deny", default=[]) or []) else "",
         "log_console_level": str(_get(cfg, "logging", "consoleLevel", default="")),
         "dm_scope":          str(_get(cfg, "session", "dmScope", default="")),
+        # Session persistence
+        "session_reset_mode":   str(_get(cfg, "session", "reset", "mode",    default="")),
+        "memory_flush_enabled": str(_get(cfg, "agents", "defaults", "compaction", "memoryFlush", "enabled", default="")),
     }
 
     rows = []
@@ -869,6 +910,92 @@ def build_status(cfg: dict) -> list:
     # Sort: missing/warn first, then by risk severity
     rows.sort(key=lambda r: (0 if r["status"] != "ok" else 1, RISK_ORDER.get(r["risk"], 9)))
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Identity Agent — helpers
+# ---------------------------------------------------------------------------
+
+def _get_identity_file_path(filename):
+    base = os.path.expanduser('~/.openclaw/workspace')
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, filename)
+
+
+def _get_baseline_path():
+    base = os.path.expanduser('~/.openclaw/security')
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, 'identity_baseline.json')
+
+
+def _get_backups_dir(filename):
+    base = os.path.expanduser('~/.openclaw/backups/soul')
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def _load_baseline():
+    baseline_file = _get_baseline_path()
+    if not os.path.exists(baseline_file):
+        return {}
+    try:
+        with open(baseline_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_baseline(data):
+    baseline_file = _get_baseline_path()
+    tmp_file = baseline_file + '.tmp'
+    try:
+        with open(tmp_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_file, baseline_file)
+        return True
+    except Exception:
+        if os.path.exists(tmp_file):
+            os.remove(tmp_file)
+        return False
+
+
+def _update_baseline(filename, hash_value):
+    baseline = _load_baseline()
+    baseline[filename] = {
+        'hash': hash_value,
+        'timestamp': datetime.utcnow().isoformat() + 'Z'
+    }
+    return _save_baseline(baseline)
+
+
+def _create_backup(filename, content):
+    backups_dir = _get_backups_dir(filename)
+    timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H%M')
+    backup_name = f'{filename}.{timestamp}.bak'
+    backup_file = os.path.join(backups_dir, backup_name)
+    try:
+        with open(backup_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+        backups = sorted([b for b in os.listdir(backups_dir) if b.startswith(filename)])
+        if len(backups) > 5:
+            os.remove(os.path.join(backups_dir, backups[0]))
+        return True
+    except Exception:
+        return False
+
+
+def _list_backups(filename):
+    backups_dir = _get_backups_dir(filename)
+    try:
+        files = [f for f in os.listdir(backups_dir) if f.startswith(filename)]
+        files_with_time = []
+        for f in files:
+            parts = f.replace(filename + '.', '').replace('.bak', '')
+            files_with_time.append((f, parts))
+        files_with_time.sort(key=lambda x: x[1], reverse=True)
+        return [{'name': f[0], 'timestamp': f[1]} for f in files_with_time]
+    except Exception:
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -1185,6 +1312,136 @@ def gateway_errors():
 @login_required
 def config_view():
     return jsonify(load_config())
+
+
+@app.route('/api/openclaw/identity/files')
+@login_required
+def api_identity_files():
+    include_diff = request.args.get('include_diff', 'false').lower() == 'true'
+    files_list = ['SOUL.md', 'AGENTS.md', 'IDENTITY.md', 'MEMORY.md']
+    baseline = _load_baseline()
+    result = {}
+
+    for filename in files_list:
+        filepath = _get_identity_file_path(filename)
+        exists = os.path.exists(filepath)
+        content = ''
+        hash_current = None
+        status = 'NOT_FOUND'
+
+        if exists:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                hash_current = hashlib.sha256(content.encode('utf-8')).hexdigest()
+            except Exception:
+                status = 'NOT_FOUND'
+
+        if not exists:
+            status = 'NOT_FOUND'
+        elif filename not in baseline:
+            status = 'NOT_BASELINE'
+        elif baseline[filename]['hash'] == hash_current:
+            status = 'OK'
+        else:
+            status = 'DRIFT'
+
+        result[filename.lower().replace('.md', '')] = {
+            'content': content,
+            'hash_current': hash_current,
+            'hash_baseline': baseline.get(filename, {}).get('hash'),
+            'baseline_timestamp': baseline.get(filename, {}).get('timestamp'),
+            'status': status,
+            'exists': exists,
+            'diff': None,
+        }
+
+    return jsonify(result)
+
+
+@app.route('/api/openclaw/identity/files', methods=['POST'])
+@login_required
+def api_identity_files_post():
+    data = request.get_json()
+    filename = data.get('filename')
+    content = data.get('content')
+
+    if not filename or content is None:
+        return jsonify({'ok': False, 'error': 'filename e content obrigatórios'}), 400
+
+    allowed = ['SOUL.md', 'AGENTS.md', 'IDENTITY.md', 'MEMORY.md']
+    if filename not in allowed:
+        return jsonify({'ok': False, 'error': 'filename inválido'}), 400
+
+    filepath = _get_identity_file_path(filename)
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Erro ao salvar: {str(e)}'}), 500
+
+    hash_value = hashlib.sha256(content.encode('utf-8')).hexdigest()
+    _create_backup(filename, content)
+    _update_baseline(filename, hash_value)
+
+    timestamp = _load_baseline()[filename]['timestamp']
+    return jsonify({'ok': True, 'hash': hash_value, 'timestamp': timestamp})
+
+
+@app.route('/api/openclaw/identity/restore', methods=['POST'])
+@login_required
+def api_identity_restore():
+    data = request.get_json()
+    filename = data.get('filename')
+    backup = data.get('backup')
+
+    if not filename or not backup:
+        return jsonify({'ok': False, 'error': 'filename e backup obrigatórios'}), 400
+
+    allowed = ['SOUL.md', 'AGENTS.md', 'IDENTITY.md', 'MEMORY.md']
+    if filename not in allowed:
+        return jsonify({'ok': False, 'error': 'filename inválido'}), 400
+
+    backups_dir = _get_backups_dir(filename)
+    backup_file = os.path.join(backups_dir, backup)
+
+    if not os.path.exists(backup_file):
+        return jsonify({'ok': False, 'error': 'Backup não encontrado'}), 404
+
+    try:
+        with open(backup_file, 'r', encoding='utf-8') as f:
+            backup_content = f.read()
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Erro ao ler backup: {str(e)}'}), 500
+
+    filepath = _get_identity_file_path(filename)
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(backup_content)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Erro ao restaurar: {str(e)}'}), 500
+
+    hash_value = hashlib.sha256(backup_content.encode('utf-8')).hexdigest()
+    _update_baseline(filename, hash_value)
+
+    timestamp = _load_baseline()[filename]['timestamp']
+    return jsonify({'ok': True, 'hash': hash_value, 'timestamp': timestamp})
+
+
+@app.route('/api/openclaw/identity/backups')
+@login_required
+def api_identity_backups():
+    filename = request.args.get('filename')
+
+    if not filename:
+        return jsonify({'ok': False, 'error': 'filename obrigatório'}), 400
+
+    allowed = ['SOUL.md', 'AGENTS.md', 'IDENTITY.md', 'MEMORY.md']
+    if filename not in allowed:
+        return jsonify({'ok': False, 'error': 'filename inválido'}), 400
+
+    backups = _list_backups(filename)
+    return jsonify({'backups': backups})
 
 
 @app.route("/compare")
@@ -1670,7 +1927,7 @@ def _check_checklist_item(key: str, cfg: dict) -> bool:
         "gateway_token_set":   lambda: bool(_get(cfg, "gateway", "auth", "token", default="")),
         "sandbox_enabled":     lambda: _get(cfg, "agents", "defaults", "sandbox", "mode", default="") in ("non-main", "all"),
         "sandbox_workspace_none": lambda: _get(cfg, "agents", "defaults", "sandbox", "workspaceAccess", default="") in ("none", "ro"),
-        "log_redact":          lambda: _get(cfg, "logging", "redactSensitive", default="") in ("tools", "all"),
+        "log_redact":          lambda: _get(cfg, "logging", "redactSensitive", default="") == "tools",
         "mdns_safe":           lambda: _get(cfg, "discovery", "mdns", "mode", default="") in ("minimal", "off"),
         "dm_pairing":          lambda: all(
             _get(cfg, "channels", ch[0], *ch[1:], default="") in ("pairing", "allowlist")
@@ -1680,7 +1937,7 @@ def _check_checklist_item(key: str, cfg: dict) -> bool:
                 ("discord", "dm", "policy"),
             ]
         ),
-        "elevated_disabled":   lambda: _get(cfg, "agents", "defaults", "tools", "elevated", "enabled", default=None) is False,
+        "elevated_disabled":   lambda: _get(cfg, "tools", "elevated", "enabled", default=None) is False,
     }
 
     checker = checks.get(key)
