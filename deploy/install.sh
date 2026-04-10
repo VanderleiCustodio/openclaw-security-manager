@@ -15,6 +15,12 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# Gera SECRET_KEY persistente se não existir
+if [ ! -f .env ] || ! grep -q "SECRET_KEY" .env 2>/dev/null; then
+    echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" >> .env
+    echo "SECRET_KEY gerada e salva em .env"
+fi
+
 # Cria usuário admin
 echo ""
 echo "=== Criar usuário de acesso ao painel ==="
