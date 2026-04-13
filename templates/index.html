@@ -1930,6 +1930,55 @@ nono run --profile openclaw -- openclaw gateway</pre>
   </div>
 </div>
 
+<!-- ============================================================ IDENTITY -->
+<div class="section" id="identity-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="shield-check"></i></span>
+    <h2>12. Identidade do Agente</h2>
+  </div>
+  <p class="hint" style="margin-bottom:10px">
+    Arquivos em <code id="identity-workspace-path">—</code> (mesmo diretório <code>.openclaw</code> do config ativo).
+  </p>
+  <div class="actions" style="margin-bottom:12px;gap:8px;flex-wrap:wrap">
+    <button type="button" class="btn-apply" id="identity-subtab-editor" onclick="showIdentitySubtab('editor')">Editor</button>
+    <button type="button" class="btn-ghost" id="identity-subtab-fim" onclick="showIdentitySubtab('fim')">Integridade (FIM)</button>
+    <button type="button" class="btn-refresh btn-ghost" onclick="loadIdentitySection(true)">Atualizar</button>
+  </div>
+
+  <div id="identity-panel-editor">
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px" id="identity-file-tabs"></div>
+    <div id="identity-editor-banner" class="hint" style="display:none;margin-bottom:8px;padding:8px 10px;border-radius:var(--r2);border:1px solid var(--b1)"></div>
+    <textarea id="identity-editor-ta" style="width:100%;min-height:360px;font-family:var(--mono);font-size:12px;background:var(--term-bg);color:var(--term-fg);border:1px solid var(--b1);border-radius:var(--r2);padding:10px" spellcheck="false" placeholder="Carregando…"></textarea>
+    <div class="hint" id="identity-editor-meta" style="margin-top:8px"></div>
+    <div class="actions" style="margin-top:10px">
+      <button type="button" class="btn-apply" onclick="confirmSaveIdentityFile()">Salvar arquivo</button>
+    </div>
+    <div id="identity-save-panel" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--b1);border-radius:var(--r2);background:var(--s2)">
+      <div style="font-weight:600;margin-bottom:8px;color:var(--t1)">Revisar alterações</div>
+      <pre id="identity-save-diff" style="max-height:220px;overflow:auto;font-family:var(--mono);font-size:11px;white-space:pre-wrap;margin:0 0 10px"></pre>
+      <button type="button" class="btn-apply" onclick="submitIdentitySave()">Confirmar gravação</button>
+      <button type="button" class="btn-ghost" onclick="cancelIdentitySave()">Cancelar</button>
+    </div>
+  </div>
+
+  <div id="identity-panel-fim" style="display:none">
+    <p class="hint" style="margin-bottom:10px">SOUL, AGENTS e IDENTITY entram no FIM; MEMORY é só edição no Editor (evita falsos positivos).</p>
+    <div id="identity-fim-status" class="hint" style="margin-bottom:8px"></div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="text-align:left;border-bottom:1px solid var(--b1);color:var(--t3)">
+          <th style="padding:6px 8px">Arquivo</th>
+          <th style="padding:6px 8px">Status</th>
+          <th style="padding:6px 8px">Hash atual</th>
+          <th style="padding:6px 8px">Baseline</th>
+          <th style="padding:6px 8px">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="identity-fim-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ============================================================ BACKUPS -->
 <div class="section" id="backups-section">
   <div class="section-header">
@@ -2615,6 +2664,313 @@ async function runAIReview() {
   }
 }
 
+// ---------------------------------------------------------- Identidade (workspace)
+const IDENTITY_ALL_FILES = ['SOUL.md', 'AGENTS.md', 'IDENTITY.md', 'MEMORY.md'];
+const IDENTITY_FIM_FILES = ['SOUL.md', 'AGENTS.md', 'IDENTITY.md'];
+
+function identityRowKey(filename) {
+  return filename.replace(/\.md$/i, '').toLowerCase();
+}
+
+let _identityEdits = {};
+let _identityOriginal = {};
+let _identityActiveFile = 'SOUL.md';
+let _identityFimRows = null;
+
+function showIdentitySubtab(which) {
+  const ed = document.getElementById('identity-panel-editor');
+  const fm = document.getElementById('identity-panel-fim');
+  const b1 = document.getElementById('identity-subtab-editor');
+  const b2 = document.getElementById('identity-subtab-fim');
+  if (!ed || !fm) return;
+  const isEd = which === 'editor';
+  ed.style.display = isEd ? 'block' : 'none';
+  fm.style.display = isEd ? 'none' : 'block';
+  if (b1) { b1.classList.toggle('btn-apply', isEd); b1.classList.toggle('btn-ghost', !isEd); }
+  if (b2) { b2.classList.toggle('btn-apply', !isEd); b2.classList.toggle('btn-ghost', isEd); }
+  if (!isEd) loadIdentityFIM();
+}
+
+function renderIdentityFileTabs() {
+  const host = document.getElementById('identity-file-tabs');
+  if (!host) return;
+  host.innerHTML = IDENTITY_ALL_FILES.map(fn => {
+    const active = fn === _identityActiveFile;
+    return `<button type="button" class="${active ? 'btn-apply' : 'btn-ghost'}" style="font-size:12px" data-ifile="${fn}" onclick="switchIdentityFile('${fn}')">${fn}</button>`;
+  }).join('');
+}
+
+function switchIdentityFile(fn) {
+  const ta = document.getElementById('identity-editor-ta');
+  if (ta && _identityActiveFile) _identityEdits[_identityActiveFile] = ta.value;
+  _identityActiveFile = fn;
+  if (ta) {
+    ta.value = Object.prototype.hasOwnProperty.call(_identityEdits, fn)
+      ? _identityEdits[fn]
+      : (_identityOriginal[fn] || '');
+  }
+  renderIdentityFileTabs();
+  updateIdentityEditorBanner();
+  updateIdentityEditorMeta();
+}
+
+function updateIdentityEditorBanner() {
+  const b = document.getElementById('identity-editor-banner');
+  if (!b) return;
+  const fn = _identityActiveFile;
+  const key = identityRowKey(fn);
+  const row = _identityLastPayload && _identityLastPayload[key];
+  if (!row) { b.style.display = 'none'; return; }
+  if (!row.exists) {
+    b.style.display = 'block';
+    b.style.background = 'rgba(234,179,8,.12)';
+    b.style.borderColor = 'rgba(234,179,8,.4)';
+    b.textContent = 'Arquivo ainda não existe no disco — será criado ao salvar.';
+    return;
+  }
+  if (row.status === 'DRIFT') {
+    b.style.display = 'block';
+    b.style.background = 'rgba(239,68,68,.1)';
+    b.style.borderColor = 'rgba(239,68,68,.35)';
+    b.textContent = '⚠ DRIFT: o conteúdo atual não coincide com o baseline de integridade. Use a aba FIM para revisar ou registre novo baseline após salvar.';
+    return;
+  }
+  if (row.status === 'NOT_BASELINE') {
+    b.style.display = 'block';
+    b.style.background = 'rgba(234,179,8,.1)';
+    b.style.borderColor = 'rgba(234,179,8,.35)';
+    b.textContent = 'Sem baseline registrado — salve o arquivo para registrar hash de integridade.';
+    return;
+  }
+  b.style.display = 'none';
+}
+
+function updateIdentityEditorMeta() {
+  const el = document.getElementById('identity-editor-meta');
+  if (!el) return;
+  const fn = _identityActiveFile;
+  const key = identityRowKey(fn);
+  const row = _identityLastPayload && _identityLastPayload[key];
+  if (!row || !row.exists) {
+    el.textContent = row && !row.exists ? 'Hash: — (arquivo ausente)' : '';
+    return;
+  }
+  const h = row.hash_current ? row.hash_current.slice(0, 12) : '—';
+  const bt = row.baseline_timestamp || '—';
+  el.textContent = `SHA-256 (12 chars): ${h} · Baseline: ${bt}`;
+}
+
+let _identityLastPayload = null;
+
+async function loadIdentitySection(force) {
+  const pathEl = document.getElementById('identity-workspace-path');
+  const ta = document.getElementById('identity-editor-ta');
+  if (ta && !force) ta.placeholder = 'Carregando…';
+  try {
+    const res = await fetch('/api/openclaw/identity/files?include_diff=false', { credentials: 'same-origin', cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok) {
+      if (pathEl) pathEl.textContent = '(erro ao carregar)';
+      showToast('❌ Falha ao carregar identidade', true);
+      return;
+    }
+    _identityLastPayload = data;
+    if (pathEl) pathEl.textContent = data.workspace_path || '(desconhecido)';
+    _identityEdits = {};
+    IDENTITY_ALL_FILES.forEach(fn => {
+      const key = identityRowKey(fn);
+      const row = data[key];
+      _identityOriginal[fn] = row && typeof row.content === 'string' ? row.content : '';
+    });
+    switchIdentityFile(_identityActiveFile);
+    updateIdentityEditorBanner();
+    lucide.createIcons();
+  } catch (e) {
+    if (pathEl) pathEl.textContent = '(erro de rede)';
+    showToast('❌ Erro de rede (identidade)', true);
+  }
+}
+
+function cancelIdentitySave() {
+  const p = document.getElementById('identity-save-panel');
+  if (p) p.style.display = 'none';
+}
+
+function _identityNaiveDiff(oldStr, newStr) {
+  const a = oldStr.split('\n');
+  const b = newStr.split('\n');
+  const n = Math.max(a.length, b.length);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x === y) out.push(' ' + (x !== undefined ? x : ''));
+    else {
+      if (x !== undefined) out.push('-' + x);
+      if (y !== undefined) out.push('+' + y);
+    }
+  }
+  return out.join('\n');
+}
+
+function confirmSaveIdentityFile() {
+  const ta = document.getElementById('identity-editor-ta');
+  const panel = document.getElementById('identity-save-panel');
+  const pre = document.getElementById('identity-save-diff');
+  if (!ta || !panel || !pre) return;
+  const fn = _identityActiveFile;
+  const cur = ta.value;
+  const orig = _identityOriginal[fn] || '';
+  if (cur === orig) {
+    showToast('Nada a salvar (sem alterações).');
+    return;
+  }
+  pre.textContent = _identityNaiveDiff(orig, cur) || '(alteração vazia)';
+  panel.style.display = 'block';
+}
+
+async function submitIdentitySave() {
+  const ta = document.getElementById('identity-editor-ta');
+  const panel = document.getElementById('identity-save-panel');
+  if (!ta) return;
+  const fn = _identityActiveFile;
+  const content = ta.value;
+  try {
+    const res = await fetch('/api/openclaw/identity/files', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: fn, content }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      showToast('❌ ' + (data.error || 'Falha ao salvar'), true);
+      return;
+    }
+    _identityOriginal[fn] = content;
+    _identityEdits[fn] = content;
+    if (panel) panel.style.display = 'none';
+    showToast('✅ ' + fn + ' salvo');
+    await loadIdentitySection(true);
+  } catch (e) {
+    showToast('❌ Erro de rede ao salvar identidade', true);
+  }
+}
+
+async function loadIdentityFIM() {
+  const tbody = document.getElementById('identity-fim-tbody');
+  const st = document.getElementById('identity-fim-status');
+  if (st) st.textContent = 'Carregando integridade…';
+  try {
+    const res = await fetch('/api/openclaw/identity/files?include_diff=true', { credentials: 'same-origin', cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok || !tbody) {
+      if (st) st.textContent = 'Falha ao carregar FIM.';
+      return;
+    }
+    _identityFimRows = data;
+    if (st) st.textContent = '';
+    tbody.innerHTML = IDENTITY_FIM_FILES.map(fn => {
+      const key = identityRowKey(fn);
+      const row = data[key] || {};
+      const status = row.status || '—';
+      const hc = row.hash_current ? row.hash_current.slice(0, 12) : '—';
+      const hb = row.hash_baseline ? row.hash_baseline.slice(0, 12) : '—';
+      let badge = status;
+      if (status === 'OK') badge = '🟢 OK';
+      else if (status === 'DRIFT') badge = '🔴 DRIFT';
+      else if (status === 'NOT_BASELINE') badge = '⚪ Sem baseline';
+      else if (status === 'NOT_FOUND') badge = '⚪ Não encontrado';
+      const diffId = 'idiff-' + key;
+      const diffBlock = (status === 'DRIFT' && Array.isArray(row.diff) && row.diff.length)
+        ? `<tr id="${diffId}" style="display:none"><td colspan="5" style="padding:8px;background:var(--term-bg);font-family:var(--mono);font-size:11px;white-space:pre-wrap">${row.diff.map(l => {
+            const esc = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+            if (l.startsWith('-')) return '<span style="color:var(--red,#f87171)">' + esc(l) + '</span>';
+            if (l.startsWith('+')) return '<span style="color:var(--green,#4ade80)">' + esc(l) + '</span>';
+            return '<span style="color:var(--t4)">' + esc(l) + '</span>';
+          }).join('\n')}</td></tr>`
+        : '';
+      return `
+        <tr style="border-bottom:1px solid var(--b1)">
+          <td style="padding:8px"><code>${fn}</code></td>
+          <td style="padding:8px">${badge}</td>
+          <td style="padding:8px;font-family:var(--mono)">${hc}</td>
+          <td style="padding:8px;font-family:var(--mono)">${hb}</td>
+          <td style="padding:8px;white-space:nowrap">
+            ${status === 'DRIFT' && row.diff && row.diff.length ? `<button type="button" class="btn-ghost" style="font-size:11px" onclick="document.getElementById('${diffId}').style.display=document.getElementById('${diffId}').style.display==='none'?'table-row':'none'">Diff</button>` : ''}
+            <button type="button" class="btn-ghost" style="font-size:11px" onclick="registerIdentityBaseline('${fn}')">Baseline</button>
+            <button type="button" class="btn-ghost" style="font-size:11px" onclick="openIdentityRestore('${fn}')">Restaurar</button>
+          </td>
+        </tr>${diffBlock}`;
+    }).join('');
+  } catch (e) {
+    if (st) st.textContent = 'Erro de rede ao carregar FIM.';
+  }
+}
+
+async function registerIdentityBaseline(fn) {
+  const data = _identityFimRows || _identityLastPayload;
+  if (!data) {
+    showToast('❌ Carregue a aba primeiro', true);
+    return;
+  }
+  const key = identityRowKey(fn);
+  const row = data[key];
+  const content = row && typeof row.content === 'string' ? row.content : '';
+  if (!row || !row.exists) {
+    showToast('❌ Arquivo inexistente — edite no Editor e salve antes.', true);
+    return;
+  }
+  try {
+    const res = await fetch('/api/openclaw/identity/files', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: fn, content }),
+    });
+    const j = await res.json();
+    if (!res.ok || !j.ok) {
+      showToast('❌ ' + (j.error || 'Falha'), true);
+      return;
+    }
+    showToast('✅ Baseline atualizado para ' + fn);
+    await loadIdentitySection(true);
+    loadIdentityFIM();
+  } catch (e) {
+    showToast('❌ Erro de rede', true);
+  }
+}
+
+async function openIdentityRestore(fn) {
+  try {
+    const res = await fetch('/api/openclaw/identity/backups?filename=' + encodeURIComponent(fn), { credentials: 'same-origin' });
+    const data = await res.json();
+    if (!res.ok || !data.backups || !data.backups.length) {
+      showToast('Nenhum backup disponível para ' + fn, true);
+      return;
+    }
+    const names = data.backups.map(b => b.name);
+    const choice = window.prompt('Backup para restaurar:\n' + names.join('\n'), names[0]);
+    if (!choice) return;
+    const r2 = await fetch('/api/openclaw/identity/restore', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: fn, backup: choice.trim() }),
+    });
+    const j = await r2.json();
+    if (!r2.ok || !j.ok) {
+      showToast('❌ ' + (j.error || 'Falha ao restaurar'), true);
+      return;
+    }
+    showToast('✅ Restaurado: ' + fn);
+    await loadIdentitySection(true);
+    loadIdentityFIM();
+  } catch (e) {
+    showToast('❌ Erro de rede', true);
+  }
+}
+
 async function togglePreview() {
   const el = document.getElementById('config-preview');
   if (el.style.display === 'block') { el.style.display = 'none'; return; }
@@ -2804,6 +3160,7 @@ const SECTION_META = {
   'session-section':     { icon: 'clock',           title: 'Sessão — Persistência' },
   'config-section':      { icon: 'file-code',      title: 'Config JSON Completo' },
   'config-diff-section': { icon: 'git-compare',    title: 'Config Diff' },
+  'identity-section':    { icon: 'shield-check',   title: 'Identidade do Agente' },
   'backups-section':     { icon: 'hard-drive',     title: 'Backups' },
   'profiles-section':    { icon: 'layers',          title: 'Perfis de Segurança' },
   'pairings-section':    { icon: 'user-check',      title: 'Aprovações de Pairing' },
@@ -2844,6 +3201,7 @@ function showSection(id) {
   if (id === 'pairings-section') loadPairings();
   if (id === 'metrics-section')  loadMetrics();
   if (id === 'ai-section')       loadAISettings();
+  if (id === 'identity-section') loadIdentitySection(false);
 }
 
 // ── Sidebar collapse ─────────────────────────────────────────

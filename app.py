@@ -1,4 +1,5 @@
 import copy
+import difflib
 import hashlib
 import json
 import os
@@ -1279,25 +1280,83 @@ def build_status(cfg: dict) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Identity Agent — helpers
+# Identity Agent — helpers (workspace / baseline / backups = openclaw_dir ativo)
 # ---------------------------------------------------------------------------
 
-def _get_identity_file_path(filename):
-    base = os.path.expanduser('~/.openclaw/workspace')
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, filename)
+def _identity_openclaw_dir() -> Path:
+    _, openclaw_dir, _ = get_active_paths()
+    return Path(openclaw_dir)
 
 
-def _get_baseline_path():
-    base = os.path.expanduser('~/.openclaw/security')
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, 'identity_baseline.json')
+def _get_identity_file_path(filename: str) -> str:
+    ws = _identity_openclaw_dir() / "workspace"
+    ws.mkdir(parents=True, exist_ok=True)
+    return str(ws / filename)
 
 
-def _get_backups_dir(filename):
-    base = os.path.expanduser('~/.openclaw/backups/soul')
-    os.makedirs(base, exist_ok=True)
-    return base
+def _get_baseline_path() -> str:
+    sec = _identity_openclaw_dir() / "security"
+    sec.mkdir(parents=True, exist_ok=True)
+    return str(sec / "identity_baseline.json")
+
+
+def _get_backups_dir(filename: str) -> str:
+    b = _identity_openclaw_dir() / "backups" / "soul"
+    b.mkdir(parents=True, exist_ok=True)
+    return str(b)
+
+
+def _read_latest_backup_content(filename: str) -> str | None:
+    backups_dir = Path(_get_backups_dir(filename))
+    if not backups_dir.is_dir():
+        return None
+    try:
+        names = sorted(
+            (f for f in os.listdir(backups_dir) if f.startswith(filename + ".") and f.endswith(".bak")),
+            reverse=True,
+        )
+    except OSError:
+        return None
+    if not names:
+        return None
+    try:
+        return (backups_dir / names[0]).read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+
+
+def _identity_line_diff(old: str, new: str) -> list[str]:
+    lines: list[str] = []
+    for line in difflib.ndiff(old.splitlines(), new.splitlines()):
+        if line.startswith("? "):
+            continue
+        if line.startswith("- "):
+            lines.append("-" + line[2:])
+        elif line.startswith("+ "):
+            lines.append("+" + line[2:])
+        elif line.startswith("  "):
+            lines.append(" " + line[2:])
+    return lines
+
+
+def _collect_identity_workspace_snippets(max_chars: int = 4000) -> dict[str, str | None]:
+    """Trechos dos arquivos de identidade no workspace do config ativo (ex.: contexto IA)."""
+    out: dict[str, str | None] = {}
+    for fn in ("SOUL.md", "AGENTS.md", "IDENTITY.md", "MEMORY.md"):
+        p = Path(_get_identity_file_path(fn))
+        if not p.exists():
+            out[fn] = None
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            out[fn] = "(erro ao ler arquivo)"
+            continue
+        if len(text) > max_chars:
+            out[fn] = text[:max_chars] + "\n… [truncado]"
+        else:
+            out[fn] = text
+    return out
 
 
 def _load_baseline():
@@ -1605,6 +1664,7 @@ def api_ai_review_config():
         "gateway_errors": gateway_data.get("errors", []),
         "docker_status": docker_data,
         "openclaw_references": docs_context,
+        "identity_workspace": _collect_identity_workspace_snippets(),
         "analysis_requirements": {
             "must_include_why_and_how": True,
             "must_cite_openclaw_reference": True,
@@ -1832,7 +1892,9 @@ def api_identity_files():
     include_diff = request.args.get('include_diff', 'false').lower() == 'true'
     files_list = ['SOUL.md', 'AGENTS.md', 'IDENTITY.md', 'MEMORY.md']
     baseline = _load_baseline()
-    result = {}
+    result: dict = {
+        "workspace_path": str(_identity_openclaw_dir() / "workspace"),
+    }
 
     for filename in files_list:
         filepath = _get_identity_file_path(filename)
@@ -1858,6 +1920,12 @@ def api_identity_files():
         else:
             status = 'DRIFT'
 
+        diff = None
+        if include_diff and exists and status == 'DRIFT' and content:
+            old_text = _read_latest_backup_content(filename)
+            if old_text is not None:
+                diff = _identity_line_diff(old_text, content)
+
         result[filename.lower().replace('.md', '')] = {
             'content': content,
             'hash_current': hash_current,
@@ -1865,7 +1933,7 @@ def api_identity_files():
             'baseline_timestamp': baseline.get(filename, {}).get('timestamp'),
             'status': status,
             'exists': exists,
-            'diff': None,
+            'diff': diff,
         }
 
     return jsonify(result)
