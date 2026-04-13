@@ -139,7 +139,12 @@ Response:
     "suggestions": [
       {
         "title": "string",
+        "why": "string",
         "recommended_change": "string",
+        "how": [
+          "string"
+        ],
+        "openclaw_reference": "string",
         "target_section": "tools|sandbox|plugins|identity|session|other",
         "priority": "P1|P2|P3"
       }
@@ -164,12 +169,15 @@ O prompt da IA deve:
 - incluir contexto consolidado em JSON;
 - forçar saída estritamente em JSON com schema esperado;
 - pedir evidência explícita para cada finding;
+- exigir fundamentação na documentação oficial do OpenClaw para cada recomendação;
+- explicar claramente o **porquê** (risco/impacto) e o **como** (passos objetivos) de cada sugestão;
 - proibir recomendações fora do escopo do contexto recebido.
 
 Estrutura:
 1. System prompt com papel (security config reviewer).
-2. Developer constraints (responder somente JSON válido).
-3. User payload com dados coletados (`config`, `audit`, `errors`, `docker`).
+2. Developer constraints (responder somente JSON válido, com campos `why`, `how` e `openclaw_reference` obrigatórios em `suggestions`).
+3. User payload com dados coletados (`config`, `audit`, `errors`, `docker`) + trechos relevantes da documentação OpenClaw local.
+4. Instrução explícita para citar seção/tópico de referência da doc usada em cada recomendação.
 
 ## Security & Secrets
 
