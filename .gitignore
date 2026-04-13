@@ -32,6 +32,9 @@ Thumbs.db
 # Git worktrees
 .worktrees/
 
+# Scripts locais de validação / smoke (não fazem parte do deploy do painel)
+scripts/
+
 # Agent / IDE local state (não faz parte do app em produção)
 .claude/
 .omc/
