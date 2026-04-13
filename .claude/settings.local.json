@@ -32,7 +32,10 @@
       "Bash(CONFIG_TYPE=\"global\")",
       "Bash(bash \"C:/Users/vande/.claude/plugins/cache/omc/oh-my-claudecode/4.11.2/scripts/setup-progress.sh\" save 3 \"$CONFIG_TYPE\")",
       "mcp__plugin_oh-my-claudecode_t__state_write",
-      "Bash(gh auth:*)"
+      "Bash(gh auth:*)",
+      "Bash(find C:UsersvandeOneDriveDocumentsfiles -type f \\\\\\(-name *.html -o -name *.css -o -name *.js \\\\\\))",
+      "Bash(find C:UsersvandeOneDriveDocumentsfiles -name *.md -o -name *.txt)",
+      "mcp__plugin_oh-my-claudecode_t__ast_grep_search"
     ]
   }
 }

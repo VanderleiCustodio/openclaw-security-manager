@@ -83,26 +83,62 @@
   "hotPaths": [
     {
       "path": "app.py",
-      "accessCount": 51,
-      "lastAccessed": 1775763111272,
+      "accessCount": 139,
+      "lastAccessed": 1775825659653,
       "type": "file"
     },
     {
       "path": "templates\\index.html",
-      "accessCount": 23,
-      "lastAccessed": 1775762775064,
+      "accessCount": 48,
+      "lastAccessed": 1775794400422,
       "type": "directory"
     },
     {
       "path": "",
-      "accessCount": 3,
-      "lastAccessed": 1775762603046,
+      "accessCount": 13,
+      "lastAccessed": 1775791183004,
       "type": "directory"
     },
     {
+      "path": "deploy\\install.sh",
+      "accessCount": 4,
+      "lastAccessed": 1775791458367,
+      "type": "file"
+    },
+    {
       "path": "requirements.txt",
+      "accessCount": 4,
+      "lastAccessed": 1775792787055,
+      "type": "file"
+    },
+    {
+      "path": "docs\\superpowers\\plans\\2026-04-10-identity-agent-implementation.md",
+      "accessCount": 3,
+      "lastAccessed": 1775825963375,
+      "type": "file"
+    },
+    {
+      "path": "auth.py",
       "accessCount": 2,
-      "lastAccessed": 1775762618205,
+      "lastAccessed": 1775792786988,
+      "type": "file"
+    },
+    {
+      "path": "auth_routes.py",
+      "accessCount": 2,
+      "lastAccessed": 1775792790075,
+      "type": "file"
+    },
+    {
+      "path": "create_user.py",
+      "accessCount": 2,
+      "lastAccessed": 1775792809204,
+      "type": "file"
+    },
+    {
+      "path": "docs\\superpowers\\specs\\2026-04-10-identity-agent-design.md",
+      "accessCount": 2,
+      "lastAccessed": 1775825261572,
       "type": "file"
     },
     {
@@ -110,6 +146,18 @@
       "accessCount": 1,
       "lastAccessed": 1775762588773,
       "type": "directory"
+    },
+    {
+      "path": "templates\\login.html",
+      "accessCount": 1,
+      "lastAccessed": 1775790902320,
+      "type": "file"
+    },
+    {
+      "path": "deploy\\openclaw.service",
+      "accessCount": 1,
+      "lastAccessed": 1775791006337,
+      "type": "file"
     }
   ],
   "userDirectives": []

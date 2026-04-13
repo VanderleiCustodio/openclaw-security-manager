@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"C:/Users/vande/OneDrive/Documents/files\\\" && python -c \\\"import psutil; print('psutil ok')\\\" 2>&1\",\"description\":\"Verificar se psutil está disponível\"}",
-  "error": "Exit code 1\nTraceback (most recent call last):\r\n  File \"<string>\", line 1, in <module>\r\n    import psutil; print('psutil ok')\r\n    ^^^^^^^^^^^^^\r\nModuleNotFoundError: No module named 'psutil'",
-  "timestamp": "2026-04-09T19:22:41.355Z",
-  "retry_count": 1
-}
