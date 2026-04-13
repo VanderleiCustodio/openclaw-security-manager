@@ -115,11 +115,23 @@ PAIRINGS_PATH = OPENCLAW_DIR / "pairings.json"
 AI_ENV_PATH = OPENCLAW_DIR / ".env"
 AI_PROVIDER = "anthropic"
 AI_DEFAULT_MODEL = "claude-opus-4-5"
+# Anthropic Messages API: short names like "claude-sonnet-4" return 404; use aliases or dated IDs.
+# See https://docs.anthropic.com/en/docs/about-claude/models
 AI_ALLOWED_MODELS = {
     "claude-opus-4-5",
     "claude-sonnet-4-5",
-    "claude-sonnet-4",
+    "claude-sonnet-4-20250514",
 }
+# Values saved before the fix (or typos) map to a valid API model id.
+AI_MODEL_LEGACY_MAP = {
+    "claude-sonnet-4": "claude-sonnet-4-20250514",
+    "claude-sonnet-4-0": "claude-sonnet-4-20250514",
+}
+
+
+def _canonical_ai_model(model: str) -> str:
+    m = (model or "").strip()
+    return AI_MODEL_LEGACY_MAP.get(m, m)
 
 # OpenClaw só aceita session.reset.mode = daily | idle. Para não reiniciar por inatividade
 # de forma prática, use idle + idleMinutes muito alto (anos sem conversa).
@@ -189,6 +201,7 @@ def _get_ai_settings() -> dict:
     env_data, _ = _read_env_file(AI_ENV_PATH)
     api_key = env_data.get("ANTHROPIC_API_KEY", "").strip() or os.environ.get("ANTHROPIC_API_KEY", "").strip()
     model = env_data.get("AI_MODEL", "").strip() or os.environ.get("AI_MODEL", "").strip() or AI_DEFAULT_MODEL
+    model = _canonical_ai_model(model)
     if model not in AI_ALLOWED_MODELS:
         model = AI_DEFAULT_MODEL
     return {
@@ -1465,6 +1478,7 @@ def api_ai_settings_post():
 
     updates = {}
     if model:
+        model = _canonical_ai_model(model)
         if model not in AI_ALLOWED_MODELS:
             return jsonify({"success": False, "error": "Modelo inválido para esta instalação."}), 400
         updates["AI_MODEL"] = model
@@ -1497,7 +1511,7 @@ def api_ai_review_config():
     api_key = s["api_key"]
     if not api_key:
         return jsonify({"success": False, "error": "ANTHROPIC_API_KEY não configurada. Salve a chave na aba IA."}), 400
-    model = (data.get("model") or s["model"] or AI_DEFAULT_MODEL).strip()
+    model = _canonical_ai_model((data.get("model") or s["model"] or AI_DEFAULT_MODEL).strip())
     if model not in AI_ALLOWED_MODELS:
         return jsonify({"success": False, "error": "Modelo inválido."}), 400
 
