@@ -834,6 +834,11 @@
         <span class="nav-label">Security Audit</span>
         <span class="nav-badge">8</span>
       </a>
+      <a class="nav-item" onclick="showSection('ai-section')" data-section="ai-section">
+        <span class="nav-icon"><i data-lucide="sparkles"></i></span>
+        <span class="nav-label">IA Review</span>
+        <span class="nav-badge">8A</span>
+      </a>
       <a class="nav-item" onclick="showSection('nono-section')" data-section="nono-section">
         <span class="nav-icon"><i data-lucide="server"></i></span>
         <span class="nav-label">nono Sandbox</span>
@@ -1656,16 +1661,63 @@ loadGatewayErrors();
   <pre id="audit-output"></pre>
 </div>
 
+<!-- ============================================================ IA REVIEW -->
+<div class="section" id="ai-section">
+  <div class="section-header">
+    <span class="section-icon"><i data-lucide="sparkles"></i></span>
+    <h2>8A. IA Review (Claude)</h2>
+  </div>
+
+  <p class="hint" style="margin-bottom:10px">
+    Use análise assistida por IA para transformar o Deep Audit em recomendações com <strong>porquê</strong>,
+    <strong>como</strong> e referência da documentação OpenClaw.
+  </p>
+
+  <div class="row">
+    <label>API Key (Anthropic)</label>
+    <div>
+      <input id="ai_api_key" type="password" placeholder="sk-ant-..." style="width:380px" autocomplete="off">
+      <div class="hint">A chave é salva em <code>~/.openclaw/.env</code> como <code>ANTHROPIC_API_KEY</code>.</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Modelo IA</label>
+    <div>
+      <select id="ai_model_select" style="width:380px">
+        <option value="claude-opus-4-5">claude-opus-4-5 (recomendado)</option>
+        <option value="claude-sonnet-4-5">claude-sonnet-4-5</option>
+        <option value="claude-sonnet-4">claude-sonnet-4</option>
+      </select>
+      <div class="hint" id="ai-settings-status">Carregando status...</div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-apply" onclick="saveAISettings()">Salvar configuração IA</button>
+    <button class="btn-audit" onclick="runAIReview()">▶ Analisar config atual com IA</button>
+  </div>
+
+  <pre id="ai-review-output" style="display:none;background:var(--term-bg);color:var(--term-fg);max-height:420px;overflow:auto"></pre>
+  <div id="ai-review-result" class="diff-panel" style="display:none;margin-top:10px"></div>
+</div>
+
 <!-- ============================================================ CONFIG PREVIEW -->
 <div class="section" id="config-section">
   <div class="section-header">
     <span class="section-icon"><i data-lucide="file-code"></i></span>
     <h2>Config atual (JSON completo)</h2>
   </div>
+  <p class="hint" style="margin-bottom:10px">
+    Se o <code>openclaw gateway</code> acusar chaves inválidas (ex.: <code>profile</code> na raiz ou <code>agents.defaults.tools</code>),
+    use o botão abaixo para removê-las <strong>sem mudar o resto</strong> do perfil. Um backup automático é feito antes de salvar.
+  </p>
   <div class="actions">
-    <button onclick="togglePreview()">Mostrar / Ocultar</button>
-    <button onclick="copyConfig()" style="background:#e5e7eb;color:#111">Copiar</button>
+    <button type="button" onclick="togglePreview()">Mostrar / Ocultar</button>
+    <button type="button" onclick="copyConfig()" style="background:#e5e7eb;color:#111">Copiar</button>
+    <button type="button" class="btn-fix" onclick="sanitizeInvalidKeys()" title="Alinha ao schema OpenClaw atual">Limpar chaves rejeitadas pelo schema</button>
   </div>
+  <div id="sanitize-result" class="hint" style="display:none;margin-top:12px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:var(--r2);font-family:var(--mono);font-size:12px;white-space:pre-wrap"></div>
   <pre id="config-preview"></pre>
 </div>
 
@@ -2421,20 +2473,190 @@ async function runAudit(deep) {
   out.textContent = data.output;
 }
 
+async function loadAISettings() {
+  const hint = document.getElementById('ai-settings-status');
+  const sel = document.getElementById('ai_model_select');
+  if (!hint || !sel) return;
+  hint.textContent = 'Carregando configuração de IA...';
+  try {
+    const res = await fetch('/api/ai/settings', { cache: 'no-store', credentials: 'same-origin' });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      hint.textContent = 'Não foi possível carregar configuração de IA.';
+      return;
+    }
+    if (Array.isArray(data.allowed_models)) {
+      sel.innerHTML = data.allowed_models.map(m =>
+        `<option value="${m}">${m}${m === 'claude-opus-4-5' ? ' (recomendado)' : ''}</option>`
+      ).join('');
+    }
+    sel.value = data.model || 'claude-opus-4-5';
+    hint.textContent = data.api_key_configured
+      ? `Chave configurada em ${data.env_path}`
+      : `Chave ausente. Salve ANTHROPIC_API_KEY em ${data.env_path}`;
+  } catch (e) {
+    hint.textContent = 'Erro de rede ao carregar configuração de IA.';
+  }
+}
+
+async function saveAISettings() {
+  const keyInput = document.getElementById('ai_api_key');
+  const model = val('ai_model_select');
+  const hint = document.getElementById('ai-settings-status');
+  if (!model) {
+    showToast('❌ Selecione um modelo', true);
+    return;
+  }
+  if (hint) hint.textContent = 'Salvando...';
+  try {
+    const res = await fetch('/api/ai/settings', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        api_key: (keyInput?.value || '').trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showToast('❌ ' + (data.error || 'Falha ao salvar configuração IA'), true);
+      if (hint) hint.textContent = 'Falha ao salvar.';
+      return;
+    }
+    if (keyInput) keyInput.value = '';
+    showToast('✅ Configuração IA salva');
+    if (hint) hint.textContent = data.api_key_configured
+      ? `Chave configurada em ${data.env_path}`
+      : `Chave ausente. Salve ANTHROPIC_API_KEY em ${data.env_path}`;
+  } catch (e) {
+    showToast('❌ Erro de rede ao salvar configuração IA', true);
+    if (hint) hint.textContent = 'Erro de rede ao salvar.';
+  }
+}
+
+function renderAIReviewResult(analysis) {
+  const panel = document.getElementById('ai-review-result');
+  if (!panel) return;
+  const findings = Array.isArray(analysis?.findings) ? analysis.findings : [];
+  const suggestions = Array.isArray(analysis?.suggestions) ? analysis.suggestions : [];
+  const actions = Array.isArray(analysis?.priority_actions) ? analysis.priority_actions : [];
+
+  const findingsHtml = findings.length
+    ? findings.map(f => `<div class="diff-row"><span class="diff-path">${f.title || 'Finding'}</span><span class="diff-before">${f.severity || ''}</span><span class="diff-arrow">•</span><span class="diff-after">${(f.impact || '').toString()}</span></div>`).join('')
+    : '<div class="diff-row"><span class="diff-empty">Nenhum finding retornado.</span></div>';
+
+  const suggestionsHtml = suggestions.length
+    ? suggestions.map(s => `
+      <div style="padding:10px 12px;border:1px solid var(--b1);border-radius:var(--r2);margin-bottom:8px;background:var(--s2)">
+        <div style="font-weight:600;color:var(--t1)">${s.title || 'Sugestão'}</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:4px"><strong>Why:</strong> ${s.why || '—'}</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:4px"><strong>How:</strong> ${(Array.isArray(s.how) && s.how.length) ? s.how.map(h => `• ${h}`).join('<br>') : '—'}</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:4px"><strong>Referência OpenClaw:</strong> ${s.openclaw_reference || '—'}</div>
+        <div style="font-size:12px;color:var(--t3);margin-top:4px"><strong>Seção alvo:</strong> ${s.target_section || 'other'} | <strong>Prioridade:</strong> ${s.priority || 'P3'}</div>
+      </div>
+    `).join('')
+    : '<div class="diff-row"><span class="diff-empty">Nenhuma sugestão retornada.</span></div>';
+
+  const actionsHtml = actions.length
+    ? `<ol style="margin:8px 0 0 18px">${actions.map(a => `<li style="margin-bottom:4px">${a}</li>`).join('')}</ol>`
+    : '<div class="hint">Nenhuma ação prioritária retornada.</div>';
+
+  panel.innerHTML = `
+    <div class="diff-title">Resumo IA: ${analysis?.summary || '—'}</div>
+    <div class="hint" style="margin-bottom:8px">Nível de risco: <strong>${analysis?.risk_level || 'medium'}</strong></div>
+    <details open>
+      <summary>Findings</summary>
+      <div>${findingsHtml}</div>
+    </details>
+    <details open>
+      <summary>Sugestões (com why/how + referência OpenClaw)</summary>
+      <div>${suggestionsHtml}</div>
+    </details>
+    <details open>
+      <summary>Ações prioritárias</summary>
+      <div>${actionsHtml}</div>
+    </details>
+  `;
+  panel.style.display = 'block';
+}
+
+async function runAIReview() {
+  const out = document.getElementById('ai-review-output');
+  const panel = document.getElementById('ai-review-result');
+  const model = val('ai_model_select');
+  if (!model) {
+    showToast('❌ Selecione um modelo IA', true);
+    return;
+  }
+  out.style.display = 'block';
+  out.textContent = 'Executando Deep Audit + análise IA...';
+  panel.style.display = 'none';
+  try {
+    const res = await fetch('/api/ai/review-config', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deep: true, model }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      out.textContent = 'Falha na análise IA: ' + (data.error || 'erro desconhecido');
+      showToast('❌ Falha na análise IA', true);
+      return;
+    }
+    out.textContent = JSON.stringify(data.meta || {}, null, 2);
+    renderAIReviewResult(data.analysis || {});
+    showToast('✅ Análise IA concluída');
+  } catch (e) {
+    out.textContent = 'Erro de rede na análise IA.';
+    showToast('❌ Erro de rede na análise IA', true);
+  }
+}
+
 async function togglePreview() {
   const el = document.getElementById('config-preview');
   if (el.style.display === 'block') { el.style.display = 'none'; return; }
-  const res = await fetch('/config');
+  const res = await fetch('/config', { cache: 'no-store', credentials: 'same-origin' });
   const data = await res.json();
   el.textContent = JSON.stringify(data, null, 2);
   el.style.display = 'block';
 }
 
 async function copyConfig() {
-  const res = await fetch('/config');
+  const res = await fetch('/config', { cache: 'no-store', credentials: 'same-origin' });
   const data = await res.json();
   navigator.clipboard.writeText(JSON.stringify(data, null, 2));
   showToast('📋 Config copiado para o clipboard');
+}
+
+async function sanitizeInvalidKeys() {
+  if (!confirm('Remover chaves inválidas para o gateway (profile na raiz, agents.defaults.tools, etc.)?\nUm backup do openclaw.json será criado antes de salvar.')) return;
+  const box = document.getElementById('sanitize-result');
+  try {
+    const res = await fetch('/sanitize-config', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('❌ ' + (data.error || 'Falha'), true);
+      return;
+    }
+    showToast(data.message || 'OK');
+    if (box) {
+      box.style.display = 'block';
+      if (data.applied && data.applied.length) {
+        box.textContent = data.applied.join('\n') + (data.backup ? '\n\nBackup: ' + data.backup : '');
+      } else {
+        box.textContent = data.message || 'Nada a alterar.';
+      }
+    }
+    const prev = document.getElementById('config-preview');
+    if (prev && prev.style.display === 'block') {
+      const cr = await fetch('/config', { cache: 'no-store', credentials: 'same-origin' });
+      prev.textContent = JSON.stringify(await cr.json(), null, 2);
+    }
+  } catch (e) {
+    showToast('❌ Erro de rede', true);
+  }
 }
 
 async function loadBackups() {
@@ -2575,6 +2797,7 @@ const SECTION_META = {
   'model-section':       { icon: 'cpu',            title: 'Modelo' },
   'permissions-section': { icon: 'lock',           title: 'Permissões de Arquivo' },
   'audit-section':       { icon: 'search',         title: 'Security Audit' },
+  'ai-section':          { icon: 'sparkles',       title: 'IA Review (Claude)' },
   'nono-section':        { icon: 'server',         title: 'nono — Sandbox de Kernel' },
   'plugins-section':     { icon: 'puzzle',          title: 'Plugins' },
   'session-section':     { icon: 'clock',           title: 'Sessão — Persistência' },
@@ -2619,6 +2842,7 @@ function showSection(id) {
   if (id === 'profiles-section') loadProfiles();
   if (id === 'pairings-section') loadPairings();
   if (id === 'metrics-section')  loadMetrics();
+  if (id === 'ai-section')       loadAISettings();
 }
 
 // ── Sidebar collapse ─────────────────────────────────────────
@@ -2818,6 +3042,18 @@ let _userMenuOpen = false;
 
   // Init user selector
   loadUserSelector();
+
+  const userMenuList = document.getElementById('user-menu-list');
+  if (userMenuList) {
+    userMenuList.addEventListener('click', e => {
+      const item = e.target.closest('.user-menu-item');
+      if (!item || item.classList.contains('no-access')) return;
+      const enc = item.getAttribute('data-config-path');
+      if (!enc) return;
+      e.preventDefault();
+      selectUser(decodeURIComponent(enc));
+    });
+  }
 })();
 
 // ── User selector ──────────────────────────────────────────────
@@ -2854,8 +3090,8 @@ function renderUserSelector(users, activePath) {
     const locked    = u.locked === true || u.readable === false;
     const noConfig  = u.exists === false;
     const icon      = locked ? 'lock' : (noConfig ? 'file-x' : 'user');
-    const escapedPath = (u.path || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const clickAttr = locked ? '' : `onclick="selectUser('${escapedPath}')"`;
+    const pathEnc   = encodeURIComponent(u.path || '');
+    const dataPath  = locked ? '' : `data-config-path="${pathEnc}"`;
     let badge = '';
     if (locked)        badge = '<span class="user-badge" style="background:var(--danger,#e53e3e)">sem acesso</span>';
     else if (noConfig) badge = '<span class="user-badge">sem config</span>';
@@ -2865,7 +3101,7 @@ function renderUserSelector(users, activePath) {
       : (u.path || '')).replace(/"/g, '&quot;');
     return `
     <div class="user-menu-item ${isActive ? 'active' : ''} ${locked ? 'no-access' : ''}"
-         ${clickAttr} title="${tooltip}"
+         ${dataPath} title="${tooltip}"
          style="${locked ? 'cursor:not-allowed;opacity:.6' : noConfig ? 'opacity:.75' : ''}">
       <i data-lucide="${icon}" style="width:13px;height:13px;flex-shrink:0;"></i>
       <span>${u.user || '?'}</span>

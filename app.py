@@ -8,6 +8,8 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 try:
     import psutil as _psutil
@@ -110,10 +112,256 @@ CONFIG_PATH = detect_config_path()
 OPENCLAW_DIR = CONFIG_PATH.parent
 BACKUP_DIR = OPENCLAW_DIR / "backups"
 PAIRINGS_PATH = OPENCLAW_DIR / "pairings.json"
+AI_ENV_PATH = OPENCLAW_DIR / ".env"
+AI_PROVIDER = "anthropic"
+AI_DEFAULT_MODEL = "claude-opus-4-5"
+AI_ALLOWED_MODELS = {
+    "claude-opus-4-5",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4",
+}
 
 # OpenClaw só aceita session.reset.mode = daily | idle. Para não reiniciar por inatividade
 # de forma prática, use idle + idleMinutes muito alto (anos sem conversa).
 OPENCLAW_SESSION_IDLE_MINUTES_PRACTICALLY_NEVER = 9_999_999
+
+
+def _read_env_file(path: Path) -> tuple[dict, list]:
+    data = {}
+    lines = []
+    if not path.exists():
+        return data, lines
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return data, []
+    for line in lines:
+        raw = line.strip()
+        if not raw or raw.startswith("#") or "=" not in raw:
+            continue
+        key, value = raw.split("=", 1)
+        data[key.strip()] = value.strip()
+    return data, lines
+
+
+def _write_env_values(path: Path, updates: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _, lines = _read_env_file(path)
+    if not lines:
+        lines = []
+    seen = set()
+    new_lines = []
+
+    for line in lines:
+        raw = line.strip()
+        if not raw or raw.startswith("#") or "=" not in raw:
+            new_lines.append(line)
+            continue
+        key, _ = raw.split("=", 1)
+        key = key.strip()
+        if key in updates:
+            value = updates[key]
+            if value is None:
+                seen.add(key)
+                continue
+            new_lines.append(f"{key}={value}")
+            seen.add(key)
+        else:
+            new_lines.append(line)
+
+    for key, value in updates.items():
+        if key in seen or value is None:
+            continue
+        new_lines.append(f"{key}={value}")
+
+    content = "\n".join(new_lines).strip()
+    if content:
+        content += "\n"
+    path.write_text(content, encoding="utf-8")
+    if os.name != "nt":
+        try:
+            os.chmod(path, 0o600)
+        except Exception:
+            pass
+
+
+def _get_ai_settings() -> dict:
+    env_data, _ = _read_env_file(AI_ENV_PATH)
+    api_key = env_data.get("ANTHROPIC_API_KEY", "").strip() or os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    model = env_data.get("AI_MODEL", "").strip() or os.environ.get("AI_MODEL", "").strip() or AI_DEFAULT_MODEL
+    if model not in AI_ALLOWED_MODELS:
+        model = AI_DEFAULT_MODEL
+    return {
+        "provider": AI_PROVIDER,
+        "model": model,
+        "api_key": api_key,
+        "api_key_configured": bool(api_key),
+        "allowed_models": sorted(AI_ALLOWED_MODELS),
+        "env_path": str(AI_ENV_PATH),
+    }
+
+
+def _run_cmd_output(cmd: list[str], timeout: int = 30) -> str:
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return result.stdout or result.stderr or "(sem saída)"
+    except FileNotFoundError:
+        return f"⚠️ '{cmd[0]}' não encontrado no PATH."
+    except subprocess.TimeoutExpired:
+        return f"⚠️ Timeout após {timeout}s."
+    except Exception as e:
+        return f"Erro: {e}"
+
+
+def _collect_openclaw_doc_context() -> list[dict]:
+    refs = [
+        BASE_DIR / ".omc" / "research" / "openclaw-official-security.md",
+        BASE_DIR / "security-integration-report.md",
+        BASE_DIR / "docs" / "superpowers" / "specs" / "2026-04-10-config-panel-policy-first-redesign-design.md",
+    ]
+    chunks = []
+    for ref in refs:
+        if not ref.exists():
+            continue
+        try:
+            text = ref.read_text(encoding="utf-8", errors="replace").strip()
+        except Exception:
+            continue
+        if not text:
+            continue
+        chunks.append({
+            "source": str(ref.relative_to(BASE_DIR)),
+            "excerpt": text[:5000],
+        })
+    return chunks
+
+
+def _extract_json_from_text(text: str) -> dict | None:
+    if not text:
+        return None
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            data = json.loads(cleaned[start:end + 1])
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            return None
+    return None
+
+
+def _normalize_ai_analysis(payload: dict) -> dict:
+    analysis = payload if isinstance(payload, dict) else {}
+    suggestions = analysis.get("suggestions")
+    if not isinstance(suggestions, list):
+        suggestions = []
+    normalized_suggestions = []
+    for item in suggestions:
+        if not isinstance(item, dict):
+            continue
+        how_steps = item.get("how")
+        if isinstance(how_steps, str):
+            how_steps = [how_steps]
+        if not isinstance(how_steps, list):
+            how_steps = []
+        normalized_suggestions.append({
+            "title": str(item.get("title", "")).strip(),
+            "why": str(item.get("why", "")).strip(),
+            "recommended_change": str(item.get("recommended_change", "")).strip(),
+            "how": [str(x).strip() for x in how_steps if str(x).strip()],
+            "openclaw_reference": str(item.get("openclaw_reference", "")).strip(),
+            "target_section": str(item.get("target_section", "other")).strip() or "other",
+            "priority": str(item.get("priority", "P3")).strip() or "P3",
+        })
+    findings = analysis.get("findings")
+    if not isinstance(findings, list):
+        findings = []
+    priority_actions = analysis.get("priority_actions")
+    if not isinstance(priority_actions, list):
+        priority_actions = []
+    return {
+        "summary": str(analysis.get("summary", "")).strip(),
+        "risk_level": str(analysis.get("risk_level", "medium")).strip() or "medium",
+        "findings": findings,
+        "suggestions": normalized_suggestions,
+        "priority_actions": [str(x).strip() for x in priority_actions if str(x).strip()],
+    }
+
+
+def _call_anthropic_config_reviewer(api_key: str, model: str, context_payload: dict) -> tuple[dict | None, str | None]:
+    system_prompt = (
+        "Você é um revisor sênior de segurança para configuração OpenClaw. "
+        "Responda SOMENTE JSON válido. Cada sugestão deve incluir campos why, how e openclaw_reference. "
+        "Baseie-se estritamente nos dados fornecidos e nas referências OpenClaw recebidas."
+    )
+    user_prompt = (
+        "Analise a configuração atual do OpenClaw com foco em segurança.\n"
+        "Para cada sugestão, explique por que (risco/impacto), como (passos objetivos), "
+        "e cite a referência OpenClaw usada.\n"
+        "Formato obrigatório:\n"
+        "{"
+        "\"summary\": \"...\","
+        "\"risk_level\": \"low|medium|high|critical\","
+        "\"findings\": [{\"title\":\"...\",\"evidence\":\"...\",\"impact\":\"...\",\"severity\":\"low|medium|high|critical\"}],"
+        "\"suggestions\": [{\"title\":\"...\",\"why\":\"...\",\"recommended_change\":\"...\",\"how\":[\"...\"],\"openclaw_reference\":\"...\",\"target_section\":\"tools|sandbox|plugins|identity|session|other\",\"priority\":\"P1|P2|P3\"}],"
+        "\"priority_actions\": [\"...\"]"
+        "}\n\n"
+        f"Contexto:\n{json.dumps(context_payload, ensure_ascii=False)}"
+    )
+
+    body = {
+        "model": model,
+        "max_tokens": 2200,
+        "temperature": 0.1,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_prompt}],
+    }
+    req = urllib_request.Request(
+        url="https://api.anthropic.com/v1/messages",
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=45) as resp:
+            resp_body = resp.read().decode("utf-8", errors="replace")
+    except urllib_error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace") if hasattr(e, "read") else str(e)
+        return None, f"Falha HTTP na Anthropic: {e.code} {detail[:800]}"
+    except Exception as e:
+        return None, f"Falha de rede ao chamar Anthropic: {e}"
+
+    try:
+        parsed = json.loads(resp_body)
+    except Exception:
+        return None, "Resposta inválida da Anthropic (JSON HTTP)."
+    content = parsed.get("content")
+    if not isinstance(content, list) or not content:
+        return None, "Resposta da Anthropic sem conteúdo útil."
+    text_chunks = []
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "text":
+            text_chunks.append(item.get("text", ""))
+    answer_text = "\n".join(text_chunks).strip()
+    structured = _extract_json_from_text(answer_text)
+    if not structured:
+        return None, "A resposta da IA não retornou JSON válido no formato esperado."
+    return _normalize_ai_analysis(structured), None
 
 
 # ---------------------------------------------------------------------------
@@ -1182,15 +1430,7 @@ def run_cmd():
     if not cmd:
         return jsonify({"output": f"Tipo desconhecido: {cmd_type}"})
 
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        output = result.stdout or result.stderr or "(sem saída)"
-    except FileNotFoundError:
-        output = f"⚠️ '{cmd[0]}' não encontrado no PATH."
-    except subprocess.TimeoutExpired:
-        output = "⚠️ Timeout após 30s."
-    except Exception as e:
-        output = f"Erro: {e}"
+    output = _run_cmd_output(cmd, timeout=30)
     return jsonify({"output": output})
 
 
@@ -1200,6 +1440,107 @@ def run_cmd():
 def run_audit():
     deep = (request.json or {}).get("deep", False)
     return run_cmd.__wrapped__() if hasattr(run_cmd,'__wrapped__') else jsonify({"output":"use /run-cmd"})
+
+
+@app.route("/api/ai/settings", methods=["GET"])
+@login_required
+def api_ai_settings_get():
+    s = _get_ai_settings()
+    return jsonify({
+        "success": True,
+        "provider": s["provider"],
+        "model": s["model"],
+        "allowed_models": s["allowed_models"],
+        "api_key_configured": s["api_key_configured"],
+        "env_path": s["env_path"],
+    })
+
+
+@app.route("/api/ai/settings", methods=["POST"])
+@login_required
+def api_ai_settings_post():
+    data = request.json or {}
+    model = (data.get("model") or "").strip()
+    api_key = (data.get("api_key") or "").strip()
+
+    updates = {}
+    if model:
+        if model not in AI_ALLOWED_MODELS:
+            return jsonify({"success": False, "error": "Modelo inválido para esta instalação."}), 400
+        updates["AI_MODEL"] = model
+    if api_key:
+        updates["ANTHROPIC_API_KEY"] = api_key
+
+    if updates:
+        try:
+            _write_env_values(AI_ENV_PATH, updates)
+        except Exception as e:
+            return jsonify({"success": False, "error": f"Não foi possível salvar settings de IA: {e}"}), 500
+
+    s = _get_ai_settings()
+    return jsonify({
+        "success": True,
+        "provider": s["provider"],
+        "model": s["model"],
+        "allowed_models": s["allowed_models"],
+        "api_key_configured": s["api_key_configured"],
+        "env_path": s["env_path"],
+    })
+
+
+@app.route("/api/ai/review-config", methods=["POST"])
+@login_required
+def api_ai_review_config():
+    data = request.json or {}
+    deep = bool(data.get("deep", True))
+    s = _get_ai_settings()
+    api_key = s["api_key"]
+    if not api_key:
+        return jsonify({"success": False, "error": "ANTHROPIC_API_KEY não configurada. Salve a chave na aba IA."}), 400
+    model = (data.get("model") or s["model"] or AI_DEFAULT_MODEL).strip()
+    if model not in AI_ALLOWED_MODELS:
+        return jsonify({"success": False, "error": "Modelo inválido."}), 400
+
+    current_cfg = sanitize_openclaw_config(load_config())
+    audit_cmd = ["openclaw", "security", "audit"] + (["--deep"] if deep else [])
+    audit_output = _run_cmd_output(audit_cmd, timeout=45)
+    gateway_data = _gateway_errors_payload(limit=30)
+    docker_data = _docker_status_payload()
+    docs_context = _collect_openclaw_doc_context()
+
+    context_payload = {
+        "config": current_cfg,
+        "audit": {
+            "deep": deep,
+            "output": audit_output[:16000],
+        },
+        "gateway_errors": gateway_data.get("errors", []),
+        "docker_status": docker_data,
+        "openclaw_references": docs_context,
+        "analysis_requirements": {
+            "must_include_why_and_how": True,
+            "must_cite_openclaw_reference": True,
+            "language": "pt-BR",
+        },
+    }
+
+    analysis, err = _call_anthropic_config_reviewer(api_key=api_key, model=model, context_payload=context_payload)
+    if err:
+        return jsonify({"success": False, "error": err}), 502
+
+    return jsonify({
+        "success": True,
+        "analysis": analysis,
+        "meta": {
+            "provider": AI_PROVIDER,
+            "model": model,
+            "context": {
+                "audit_deep_used": deep,
+                "gateway_error_count": len(gateway_data.get("errors", [])),
+                "openclaw_reference_docs": [x.get("source") for x in docs_context],
+            },
+        },
+    })
 
 
 
@@ -1259,9 +1600,7 @@ def _diagnose(message: str) -> dict | None:
     return None
 
 
-@app.route("/docker/status")
-@login_required
-def docker_status():
+def _docker_status_payload() -> dict:
     """Check if Docker (or Podman) daemon is reachable on this machine."""
     import platform
     running = False
@@ -1338,26 +1677,30 @@ def docker_status():
         found = [name for name, path in sockets.items() if Path(path).exists()]
         socket_status = found if found else None
 
-    return jsonify({
+    return {
         "running":        running or podman_running,
         "engine":         engine,
         "detail":         detail,
         "platform":       _sys,
         "pipes":          pipe_status,
         "sockets":        socket_status,
-    })
+    }
 
 
-@app.route("/gateway/errors")
+@app.route("/docker/status")
 @login_required
-def gateway_errors():
+def docker_status():
+    return jsonify(_docker_status_payload())
+
+
+def _gateway_errors_payload(limit: int = 100) -> dict:
     """Return today's error-level lines from the gateway log file, with diagnosis."""
     import tempfile
     log_dir = Path(tempfile.gettempdir()) / "openclaw"
     today = datetime.now().strftime("%Y-%m-%d")
     log_file = log_dir / f"openclaw-{today}.log"
     if not log_file.exists():
-        return jsonify({"errors": [], "log_file": str(log_file), "found": False})
+        return {"errors": [], "log_file": str(log_file), "found": False}
     errors = []
     try:
         with open(log_file, encoding="utf-8", errors="replace") as f:
@@ -1379,8 +1722,14 @@ def gateway_errors():
                     if '"level":"error"' in line or '"level": "error"' in line:
                         errors.append({"time": "", "subsystem": "", "message": line, "diagnosis": _diagnose(line)})
     except Exception as e:
-        return jsonify({"errors": [], "log_file": str(log_file), "found": True, "read_error": str(e)})
-    return jsonify({"errors": errors[-100:], "log_file": str(log_file), "found": True})
+        return {"errors": [], "log_file": str(log_file), "found": True, "read_error": str(e)}
+    return {"errors": errors[-limit:], "log_file": str(log_file), "found": True}
+
+
+@app.route("/gateway/errors")
+@login_required
+def gateway_errors():
+    return jsonify(_gateway_errors_payload(limit=100))
 
 
 @app.route("/config")
