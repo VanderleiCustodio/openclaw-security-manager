@@ -94,9 +94,16 @@ def detect_config_path() -> Path:
         ]
 
     for p in candidates:
-        if p.exists():
-            return p
-    return candidates[0]  # default: first candidate for this platform
+        try:
+            if p.exists():
+                return p
+        except PermissionError:
+            # Ignore inaccessible paths (e.g. /root for non-root users).
+            continue
+
+    if _sys == "Windows":
+        return candidates[0]
+    return Path.home() / ".openclaw" / "openclaw.json"
 
 
 CONFIG_PATH = detect_config_path()
@@ -179,6 +186,23 @@ def discover_user_configs() -> list:
     return found
 
 
+def _canonical_config_path(path_str: str) -> str | None:
+    """Associa o path enviado pelo cliente ao path conhecido (equivale Path no Windows/Linux)."""
+    if not path_str or not isinstance(path_str, str):
+        return None
+    try:
+        incoming = Path(path_str)
+    except Exception:
+        return None
+    for u in discover_user_configs():
+        try:
+            if Path(u["path"]) == incoming:
+                return u["path"]
+        except Exception:
+            continue
+    return None
+
+
 def get_active_paths():
     """Return (config_path, openclaw_dir, backup_dir) for the selected user."""
     from flask import has_request_context, session as _session
@@ -235,6 +259,7 @@ def backup_config():
 def save_config(config: dict) -> str:
     """Validate JSON, backup, then write atomically. Returns backup path."""
     config_path, openclaw_dir, _ = get_active_paths()
+    config = sanitize_openclaw_config(config)
     serialised = json.dumps(config, indent=2, ensure_ascii=False)
     json.loads(serialised)  # Re-parse to catch edge cases
 
@@ -270,6 +295,23 @@ def deep_merge(base: dict, patch: dict) -> dict:
         else:
             result[key] = copy.deepcopy(value)
     return result
+
+
+def sanitize_openclaw_config(cfg: dict) -> dict:
+    """
+    Remove chaves que o gateway OpenClaw rejeita. deep_merge com presets deixa
+    lixo legado (ex.: agents.defaults.tools, profile na raiz).
+    """
+    out = copy.deepcopy(cfg)
+    out.pop("profile", None)
+    agents = out.get("agents")
+    if isinstance(agents, dict):
+        defaults = agents.get("defaults")
+        if isinstance(defaults, dict) and "tools" in defaults:
+            agents = dict(agents)
+            agents["defaults"] = {k: v for k, v in defaults.items() if k != "tools"}
+            out["agents"] = agents
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -342,7 +384,6 @@ def _patch_sandbox(changes: dict, current: dict) -> dict:
 
 def _patch_tools(changes: dict, current: dict) -> dict:
     tools = copy.deepcopy(current.get("tools", {}))
-    agents = copy.deepcopy(current.get("agents", {}))
 
     if "profile" in changes:
         tools["profile"] = changes["profile"]
@@ -361,11 +402,9 @@ def _patch_tools(changes: dict, current: dict) -> dict:
         tools.setdefault("elevated", {})["enabled"] = changes["elevated_enabled"]
     # allowFrom is NOT written — schema expects a record type and the field
     # is only set by openclaw itself; writing an array causes validation errors.
+    # Nunca incluir agents aqui — copiar agents reintroduz agents.defaults.tools legado.
 
-    patch = {"tools": tools}
-    if agents:
-        patch["agents"] = agents
-    return patch
+    return {"tools": tools}
 
 
 def _patch_plugins(changes: dict, current: dict) -> dict:
@@ -692,14 +731,15 @@ def compute_diff(before: dict, after: dict, path: str = "") -> list:
 
 def check_permissions() -> dict:
     import platform
+    config_path, openclaw_dir, _ = get_active_paths()
     if platform.system() == "Windows":
         # Unix-style chmod bits do not apply on Windows — mark as N/A
         return {
-            "dir":    {"path": str(OPENCLAW_DIR), "current": None, "expected": None, "ok": None, "na": True},
-            "config": {"path": str(CONFIG_PATH),  "current": None, "expected": None, "ok": None, "na": True},
+            "dir":    {"path": str(openclaw_dir), "current": None, "expected": None, "ok": None, "na": True},
+            "config": {"path": str(config_path),  "current": None, "expected": None, "ok": None, "na": True},
         }
     results = {}
-    for label, path, expected in [("dir", OPENCLAW_DIR, 0o700), ("config", CONFIG_PATH, 0o600)]:
+    for label, path, expected in [("dir", openclaw_dir, 0o700), ("config", config_path, 0o600)]:
         if path.exists():
             mode = stat.S_IMODE(os.stat(path).st_mode)
             results[label] = {"path": str(path), "current": oct(mode), "expected": oct(expected), "ok": mode == expected}
@@ -712,13 +752,14 @@ def fix_permissions() -> list:
     import platform
     if platform.system() == "Windows":
         return ["Permissões Unix (chmod) não são aplicáveis no Windows."]
+    config_path, openclaw_dir, _ = get_active_paths()
     applied = []
-    if OPENCLAW_DIR.exists():
-        os.chmod(OPENCLAW_DIR, 0o700)
-        applied.append(f"{OPENCLAW_DIR} → 700")
-    if CONFIG_PATH.exists():
-        os.chmod(CONFIG_PATH, 0o600)
-        applied.append(f"{CONFIG_PATH} → 600")
+    if openclaw_dir.exists():
+        os.chmod(openclaw_dir, 0o700)
+        applied.append(f"{openclaw_dir} → 700")
+    if config_path.exists():
+        os.chmod(config_path, 0o600)
+        applied.append(f"{config_path} → 600")
     return applied
 
 
@@ -737,6 +778,7 @@ def _get(d, *keys, default=None):
 
 
 def get_ui_state(cfg: dict) -> dict:
+    active_cfg_path, _, _ = get_active_paths()
     return {
         "dm_pairing_whatsapp":      _get(cfg, "channels", "whatsapp", "dmPolicy",              default=""),
         "dm_pairing_telegram":      _get(cfg, "channels", "telegram", "dmPolicy",              default=""),
@@ -774,8 +816,8 @@ def get_ui_state(cfg: dict) -> dict:
         "model_fallback": "",
 
         "permissions":   check_permissions(),
-        "config_path":   str(CONFIG_PATH),
-        "config_exists": CONFIG_PATH.exists(),
+        "config_path":   str(active_cfg_path),
+        "config_exists": active_cfg_path.exists(),
 
         "session_reset_mode":    _get(cfg, "session", "reset", "mode",    default=""),
         "session_reset_at_hour": _get(cfg, "session", "reset", "atHour",  default=""),
@@ -1014,15 +1056,15 @@ def api_users():
 @login_required
 def api_select_user():
     data = request.json or {}
-    path_str = data.get("path", "")
-    known = {u["path"] for u in discover_user_configs()}
-    if path_str not in known:
+    path_str = (data.get("path") or "").strip()
+    canonical = _canonical_config_path(path_str)
+    if not canonical:
         return jsonify({"success": False, "error": "Config path inválido."}), 400
-    p = Path(path_str)
-    if not os.access(p, os.R_OK):
+    p = Path(canonical)
+    if not p.exists() or not os.access(p, os.R_OK):
         return jsonify({"success": False, "error": "Sem permissão de leitura."}), 403
-    session["active_config_path"] = path_str
-    return jsonify({"success": True, "path": path_str})
+    session["active_config_path"] = canonical
+    return jsonify({"success": True, "path": canonical})
 
 
 @app.route("/security-status")
@@ -1049,7 +1091,7 @@ def preview_change():
     data = request.json
     current = load_config()
     patch = build_patch(data.get("section"), data.get("changes", {}), current)
-    after = deep_merge(current, patch)
+    after = sanitize_openclaw_config(deep_merge(current, patch))
     diff = compute_diff(current, after)
     return jsonify({
         "diff": diff,
@@ -1074,7 +1116,7 @@ def apply_route():
     if not patch:
         return jsonify({"success": False, "error": "Nenhuma alteração gerada para a seção: " + section})
 
-    after = deep_merge(current, patch)
+    after = sanitize_openclaw_config(deep_merge(current, patch))
     diff = compute_diff(current, after)
 
     if not diff:
@@ -1087,6 +1129,39 @@ def apply_route():
 
     applied = [f"{d['path']}: {json.dumps(d['before'])} → {json.dumps(d['after'])}" for d in diff]
     return jsonify({"success": True, "applied": applied, "backup": backup_path, "diff": diff})
+
+
+@app.route("/sanitize-config", methods=["POST"])
+@login_required
+def sanitize_config_route():
+    """Remove só chaves rejeitadas pelo schema do gateway (legado / merge sujo)."""
+    current = load_config()
+    cleaned = sanitize_openclaw_config(current)
+    diff = compute_diff(current, cleaned)
+    if not diff:
+        return jsonify({
+            "success": True,
+            "message": "Nenhuma chave inválida encontrada — o JSON já está alinhado ao schema.",
+            "applied": [],
+            "backup": None,
+        })
+    try:
+        backup_path = save_config(cleaned)
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Erro ao salvar: {e}"})
+    applied = [
+        f"{d['path']}: removido"
+        if d.get("after") is None
+        else f"{d['path']}: alterado"
+        for d in diff
+    ]
+    return jsonify({
+        "success": True,
+        "message": f"Removidas ou ajustadas {len(diff)} entrada(s). Backup criado.",
+        "applied": applied,
+        "backup": backup_path,
+        "diff": diff,
+    })
 
 
 @app.route("/run-cmd", methods=["POST"])
@@ -1647,8 +1722,8 @@ def platform_info():
         "is_linux":   _sys == "Linux",
         "is_windows": _sys == "Windows",
         "is_mac":     _sys == "Darwin",
-        "config_path": str(CONFIG_PATH),
-        "openclaw_dir": str(OPENCLAW_DIR),
+        "config_path": str(get_active_paths()[0]),
+        "openclaw_dir": str(get_active_paths()[0].parent),
     })
 
 
@@ -1768,7 +1843,7 @@ def profiles():
         ("devops",     "devops_preset"),
     ]:
         patch = build_patch(builder_key, {}, cfg)
-        after = deep_merge(cfg, patch)
+        after = sanitize_openclaw_config(deep_merge(cfg, patch))
         diff = compute_diff(cfg, after)
         result[name] = {
             "diff": diff,
