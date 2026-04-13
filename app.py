@@ -332,23 +332,50 @@ def _normalize_ai_analysis(payload: dict) -> dict:
 
 def _call_anthropic_config_reviewer(api_key: str, model: str, context_payload: dict) -> tuple[dict | None, str | None]:
     system_prompt = (
-        "Você é um revisor de segurança OpenClaw. "
-        "Regras absolutas: (1) Sua mensagem inteira deve ser UM único objeto JSON válido UTF-8. "
-        "(2) Proibido markdown, proibido ```, proibido texto antes ou depois do JSON. "
-        "(3) Cada item em suggestions precisa dos campos why, how (array de strings), openclaw_reference. "
-        "(4) Use apenas evidências do contexto JSON abaixo."
+        "Você é revisor sênior de segurança OpenClaw (gateway, agente, sandbox, ferramentas, canais, sessão). "
+        "Sua entrada é um JSON de contexto gerado pelo painel: config sanitizado, saída textual do comando "
+        "`openclaw security audit` (com ou sem --deep), erros recentes do gateway, status Docker/sandbox, "
+        "trechos opcionais de documentação em openclaw_references, e arquivos de identidade em identity_workspace.\n\n"
+        "Regras de saída (obrigatórias):\n"
+        "(1) Responda com UM único objeto JSON válido em UTF-8. Sem markdown, sem cercas ```, sem texto antes ou depois.\n"
+        "(2) Dentro do JSON, use \\n para quebras de linha em strings; não quebre o objeto fora de strings.\n"
+        "(3) Não invente achados: cada finding e cada suggestion deve poder ser justificado com algo presente no contexto "
+        "(trecho do audit.output, campo do config, linha de gateway_errors, docker_status, identity_workspace ou trecho "
+        "nomeado em openclaw_references). Se não houver evidência, não liste.\n"
+        "(4) Priorize a análise da chave audit.output: interprete falhas, avisos, checks e recomendações do CLI; "
+        "cruze com o objeto config para dizer o que está configurado hoje versus o que o audit reclama.\n"
+        "(5) findings: título curto; evidence com citação ou paráfrase fiel do contexto (não genérico); impact em linguagem clara; "
+        "severity alinhada à gravidade real (ex.: DM aberto, auth gateway fraca, sandbox off = mais alto).\n"
+        "(6) suggestions: cada uma com why (risco ou gap), recommended_change (o quê mudar), how (passos concretos, verbos no imperativo), "
+        "openclaw_reference (ex.: caminho do doc em openclaw_references, ou \"audit_cli\", ou \"gateway_log\"), "
+        "target_section (ferramenta do painel: tools|sandbox|plugins|gateway|channels|session|logging|identity|other), "
+        "priority P1=imediato/crítico, P2=alto, P3=médio ou higiene.\n"
+        "(7) priority_actions: até 7 frases curtas, ordenadas do mais urgente ao menos, iniciando com verbo, "
+        "derivadas do audit e dos erros — não repita o parágrafo do summary.\n"
+        "(8) Idioma: pt-BR em summary, findings, suggestions e priority_actions.\n"
+        "(9) Se audit.output indicar erro de execução (comando falhou, timeout, \"não encontrado\"), "
+        "risk_level pode ser medium, summary deve explicar que o audit não foi conclusivo e os findings devem refletir só o que for dedutível.\n"
+        "(10) Se o audit reportar situação boa e não houver gateway_errors graves, risk_level baixo e findings podem ser poucos ou vazios."
     )
     schema_hint = (
-        '{"summary":"string","risk_level":"low|medium|high|critical",'
-        '"findings":[{"title":"string","evidence":"string","impact":"string","severity":"low|medium|high|critical"}],'
-        '"suggestions":[{"title":"string","why":"string","recommended_change":"string","how":["string"],'
-        '"openclaw_reference":"string","target_section":"tools|sandbox|plugins|identity|session|other","priority":"P1|P2|P3"}],'
+        '{"summary":"string (2-4 frases)","risk_level":"low|medium|high|critical",'
+        '"findings":[{"title":"string","evidence":"string (ligada ao contexto)","impact":"string","severity":"low|medium|high|critical"}],'
+        '"suggestions":[{"title":"string","why":"string","recommended_change":"string","how":["passo 1","passo 2"],'
+        '"openclaw_reference":"string","target_section":"tools|sandbox|plugins|gateway|channels|session|logging|identity|other","priority":"P1|P2|P3"}],'
         '"priority_actions":["string"]}'
     )
     user_prompt = (
-        "Analise o contexto (config + audit + erros + docker + referências OpenClaw) e produza o JSON no schema:\n"
+        "Tarefa: transformar o resultado do security audit (e dados correlatos) em um relatório estruturado no schema abaixo.\n\n"
+        "Metodologia sugerida:\n"
+        "A) Leia audit.output de ponta a ponta. Identifique linhas de FAIL/WARN/CRITICAL/recomendação e o que o CLI afirma sobre a configuração.\n"
+        "B) Para cada tema relevante, localize o valor atual em config (chaves aninhadas: gateway, channels, agents.defaults, tools, plugins, session, logging).\n"
+        "C) Incorpore gateway_errors e docker_status quando explicarem falhas de runtime (sandbox, permissões, rede).\n"
+        "D) Use identity_workspace apenas se houver relação com postura do agente ou inconsistência com o audit; não force.\n"
+        "E) Use openclaw_references para citar trechos já fornecidos; se um tópico não aparecer nos trechos, use openclaw_reference "
+        "\"audit_cli\" ou \"gateway_log\" conforme a fonte.\n\n"
+        "Schema JSON exato a produzir (apenas o objeto, sem comentários):\n"
         f"{schema_hint}\n\n"
-        "Contexto (JSON):\n"
+        "Contexto (JSON do painel):\n"
         f"{json.dumps(context_payload, ensure_ascii=False)}"
     )
 
@@ -1669,6 +1696,11 @@ def api_ai_review_config():
             "must_include_why_and_how": True,
             "must_cite_openclaw_reference": True,
             "language": "pt-BR",
+            "audit_primary": True,
+            "instruction": (
+                "O campo audit.output é a fonte principal; cruzar com config e gateway_errors. "
+                "Não inventar problemas ausentes do contexto."
+            ),
         },
     }
 
