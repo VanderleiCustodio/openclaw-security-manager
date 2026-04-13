@@ -127,6 +127,18 @@ AI_MODEL_LEGACY_MAP = {
     "claude-sonnet-4-0": "claude-sonnet-4-20250514",
 }
 
+# Anthropic: leitura completa do corpo usa o mesmo limite que a conexão; 45s estoura com rede lenta + max_tokens alto.
+_ANTHROPIC_TIMEOUT_DEFAULT_SEC = 300
+_ANTHROPIC_TIMEOUT_MAX_SEC = 900
+
+
+def _anthropic_http_timeout_sec() -> int:
+    try:
+        v = int(os.environ.get("OPENCLAW_ANTHROPIC_TIMEOUT_SEC", str(_ANTHROPIC_TIMEOUT_DEFAULT_SEC)))
+    except (TypeError, ValueError):
+        v = _ANTHROPIC_TIMEOUT_DEFAULT_SEC
+    return max(45, min(v, _ANTHROPIC_TIMEOUT_MAX_SEC))
+
 
 def _canonical_ai_model(model: str) -> str:
     m = (model or "").strip()
@@ -359,13 +371,37 @@ def _call_anthropic_config_reviewer(api_key: str, model: str, context_payload: d
         },
         method="POST",
     )
+    timeout_sec = _anthropic_http_timeout_sec()
     try:
-        with urllib_request.urlopen(req, timeout=45) as resp:
+        with urllib_request.urlopen(req, timeout=timeout_sec) as resp:
             resp_body = resp.read().decode("utf-8", errors="replace")
     except urllib_error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace") if hasattr(e, "read") else str(e)
         return None, f"Falha HTTP na Anthropic: {e.code} {detail[:800]}"
+    except urllib_error.URLError as e:
+        reason = getattr(e, "reason", None)
+        detail = str(reason) if reason is not None else str(e)
+        low = detail.lower()
+        if "timed out" in low or "timeout" in low:
+            return None, (
+                f"Timeout ao aguardar a Anthropic (limite {timeout_sec}s nesta requisição). "
+                "Rede lenta ou resposta longa; tente de novo. "
+                "Opcional: exporte OPENCLAW_ANTHROPIC_TIMEOUT_SEC=600 (45–900) antes de iniciar o painel."
+            )
+        return None, f"Falha de rede ao chamar Anthropic: {e}"
+    except TimeoutError as e:
+        return None, (
+            f"Timeout ao aguardar a Anthropic (limite {timeout_sec}s). "
+            "Tente de novo ou aumente OPENCLAW_ANTHROPIC_TIMEOUT_SEC (45–900)."
+        )
     except Exception as e:
+        err = str(e)
+        low = err.lower()
+        if "timed out" in low or "timeout" in low:
+            return None, (
+                f"Timeout ao aguardar a Anthropic (limite {timeout_sec}s). "
+                "Tente de novo ou aumente OPENCLAW_ANTHROPIC_TIMEOUT_SEC (45–900)."
+            )
         return None, f"Falha de rede ao chamar Anthropic: {e}"
 
     try:
