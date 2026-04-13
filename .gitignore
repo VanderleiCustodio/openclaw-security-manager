@@ -31,3 +31,19 @@ Thumbs.db
 
 # Git worktrees
 .worktrees/
+
+# Agent / IDE local state (não faz parte do app em produção)
+.claude/
+.omc/
+.superpowers/
+
+# Documentação de design, specs e capturas (opcional localmente; não necessário para rodar o painel)
+docs/
+screenshots/
+
+# Relatórios / notas locais usados só como contexto opcional para IA
+security-integration-report.md
+
+# Scripts de simulação de ambiente (dev/VM); deploy de produção está em install.sh + *.service + nginx
+deploy/linux-sim-environment.md
+deploy/wsl-multiuser-sim.sh
