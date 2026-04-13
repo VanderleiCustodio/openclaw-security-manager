@@ -37,7 +37,7 @@ scripts/
 
 # Agent / IDE / plugins local (não faz parte do app em produção)
 .claude/
-.cursor/
+.cursor/skills-cursor/
 .omc/
 .superpowers/
 
