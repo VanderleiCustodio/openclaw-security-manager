@@ -253,27 +253,29 @@ def _collect_openclaw_doc_context() -> list[dict]:
 
 
 def _extract_json_from_text(text: str) -> dict | None:
+    """Parse first complete JSON object from model output (handles prose/markdown around it)."""
     if not text:
         return None
     cleaned = text.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = re.sub(r"\s*```\s*$", "", cleaned)
+    decoder = json.JSONDecoder()
     try:
-        data = json.loads(cleaned)
-        if isinstance(data, dict):
-            return data
-    except Exception:
+        obj, _ = decoder.raw_decode(cleaned)
+        if isinstance(obj, dict):
+            return obj
+    except json.JSONDecodeError:
         pass
-    start = cleaned.find("{")
-    end = cleaned.rfind("}")
-    if start != -1 and end != -1 and end > start:
+    for i, ch in enumerate(cleaned):
+        if ch != "{":
+            continue
         try:
-            data = json.loads(cleaned[start:end + 1])
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            return None
+            obj, _ = decoder.raw_decode(cleaned, i)
+            if isinstance(obj, dict):
+                return obj
+        except json.JSONDecodeError:
+            continue
     return None
 
 
@@ -317,31 +319,35 @@ def _normalize_ai_analysis(payload: dict) -> dict:
 
 def _call_anthropic_config_reviewer(api_key: str, model: str, context_payload: dict) -> tuple[dict | None, str | None]:
     system_prompt = (
-        "Você é um revisor sênior de segurança para configuração OpenClaw. "
-        "Responda SOMENTE JSON válido. Cada sugestão deve incluir campos why, how e openclaw_reference. "
-        "Baseie-se estritamente nos dados fornecidos e nas referências OpenClaw recebidas."
+        "Você é um revisor de segurança OpenClaw. "
+        "Regras absolutas: (1) Sua mensagem inteira deve ser UM único objeto JSON válido UTF-8. "
+        "(2) Proibido markdown, proibido ```, proibido texto antes ou depois do JSON. "
+        "(3) Cada item em suggestions precisa dos campos why, how (array de strings), openclaw_reference. "
+        "(4) Use apenas evidências do contexto JSON abaixo."
+    )
+    schema_hint = (
+        '{"summary":"string","risk_level":"low|medium|high|critical",'
+        '"findings":[{"title":"string","evidence":"string","impact":"string","severity":"low|medium|high|critical"}],'
+        '"suggestions":[{"title":"string","why":"string","recommended_change":"string","how":["string"],'
+        '"openclaw_reference":"string","target_section":"tools|sandbox|plugins|identity|session|other","priority":"P1|P2|P3"}],'
+        '"priority_actions":["string"]}'
     )
     user_prompt = (
-        "Analise a configuração atual do OpenClaw com foco em segurança.\n"
-        "Para cada sugestão, explique por que (risco/impacto), como (passos objetivos), "
-        "e cite a referência OpenClaw usada.\n"
-        "Formato obrigatório:\n"
-        "{"
-        "\"summary\": \"...\","
-        "\"risk_level\": \"low|medium|high|critical\","
-        "\"findings\": [{\"title\":\"...\",\"evidence\":\"...\",\"impact\":\"...\",\"severity\":\"low|medium|high|critical\"}],"
-        "\"suggestions\": [{\"title\":\"...\",\"why\":\"...\",\"recommended_change\":\"...\",\"how\":[\"...\"],\"openclaw_reference\":\"...\",\"target_section\":\"tools|sandbox|plugins|identity|session|other\",\"priority\":\"P1|P2|P3\"}],"
-        "\"priority_actions\": [\"...\"]"
-        "}\n\n"
-        f"Contexto:\n{json.dumps(context_payload, ensure_ascii=False)}"
+        "Analise o contexto (config + audit + erros + docker + referências OpenClaw) e produza o JSON no schema:\n"
+        f"{schema_hint}\n\n"
+        "Contexto (JSON):\n"
+        f"{json.dumps(context_payload, ensure_ascii=False)}"
     )
 
     body = {
         "model": model,
-        "max_tokens": 2200,
-        "temperature": 0.1,
+        "max_tokens": 8192,
+        "temperature": 0,
         "system": system_prompt,
-        "messages": [{"role": "user", "content": user_prompt}],
+        "messages": [
+            {"role": "user", "content": user_prompt},
+            {"role": "assistant", "content": "{"},
+        ],
     }
     req = urllib_request.Request(
         url="https://api.anthropic.com/v1/messages",
@@ -374,9 +380,21 @@ def _call_anthropic_config_reviewer(api_key: str, model: str, context_payload: d
         if isinstance(item, dict) and item.get("type") == "text":
             text_chunks.append(item.get("text", ""))
     answer_text = "\n".join(text_chunks).strip()
-    structured = _extract_json_from_text(answer_text)
+    stop_reason = parsed.get("stop_reason")
+    if stop_reason == "max_tokens":
+        return None, (
+            "A resposta da IA foi truncada (limite de tokens). "
+            "Tente de novo ou reduza o tamanho do audit na VM."
+        )
+    combined = "{" + answer_text if answer_text and not answer_text.lstrip().startswith("{") else answer_text
+    structured = _extract_json_from_text(combined)
     if not structured:
-        return None, "A resposta da IA não retornou JSON válido no formato esperado."
+        snippet = (answer_text[:400] + "…") if len(answer_text) > 400 else answer_text
+        return None, (
+            "A resposta da IA não retornou JSON válido no formato esperado. "
+            "Trecho bruto (início): "
+            + json.dumps(snippet, ensure_ascii=False)
+        )
     return _normalize_ai_analysis(structured), None
 
 
