@@ -1676,8 +1676,8 @@ loadGatewayErrors();
   <div class="row">
     <label>API Key (Anthropic)</label>
     <div>
-      <input id="ai_api_key" type="password" placeholder="sk-ant-..." style="width:380px" autocomplete="off">
-      <div class="hint">A chave é salva em <code>~/.openclaw/.env</code> como <code>ANTHROPIC_API_KEY</code>.</div>
+      <input id="ai_api_key" type="text" placeholder="sk-ant-api03-..." style="width:380px;font-family:var(--mono);font-size:12px" autocomplete="off" spellcheck="false" autocapitalize="off">
+      <div class="hint">A chave é salva no mesmo diretório do <code>openclaw.json</code> ativo: <code>.openclaw/.env</code> (<code>ANTHROPIC_API_KEY</code>). Campo em texto evita o navegador bloquear o valor ao salvar.</div>
     </div>
   </div>
 
@@ -2525,7 +2525,8 @@ async function saveAISettings() {
       return;
     }
     if (keyInput) keyInput.value = '';
-    showToast('✅ Configuração IA salva');
+    if (data.warning) showToast('⚠️ ' + data.warning, true);
+    else showToast('✅ Configuração IA salva');
     if (hint) hint.textContent = data.api_key_configured
       ? `Chave configurada em ${data.env_path}`
       : `Chave ausente. Salve ANTHROPIC_API_KEY em ${data.env_path}`;

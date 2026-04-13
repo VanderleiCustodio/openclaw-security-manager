@@ -112,7 +112,6 @@ CONFIG_PATH = detect_config_path()
 OPENCLAW_DIR = CONFIG_PATH.parent
 BACKUP_DIR = OPENCLAW_DIR / "backups"
 PAIRINGS_PATH = OPENCLAW_DIR / "pairings.json"
-AI_ENV_PATH = OPENCLAW_DIR / ".env"
 AI_PROVIDER = "anthropic"
 AI_DEFAULT_MODEL = "claude-opus-4-5"
 # Anthropic Messages API: short names like "claude-sonnet-4" return 404; use aliases or dated IDs.
@@ -152,7 +151,10 @@ def _read_env_file(path: Path) -> tuple[dict, list]:
         if not raw or raw.startswith("#") or "=" not in raw:
             continue
         key, value = raw.split("=", 1)
-        data[key.strip()] = value.strip()
+        v = value.strip()
+        if len(v) >= 2 and ((v[0] == v[-1] == '"') or (v[0] == v[-1] == "'")):
+            v = v[1:-1].strip()
+        data[key.strip()] = v
     return data, lines
 
 
@@ -198,7 +200,8 @@ def _write_env_values(path: Path, updates: dict) -> None:
 
 
 def _get_ai_settings() -> dict:
-    env_data, _ = _read_env_file(AI_ENV_PATH)
+    env_path = _ai_env_path()
+    env_data, _ = _read_env_file(env_path)
     api_key = env_data.get("ANTHROPIC_API_KEY", "").strip() or os.environ.get("ANTHROPIC_API_KEY", "").strip()
     model = env_data.get("AI_MODEL", "").strip() or os.environ.get("AI_MODEL", "").strip() or AI_DEFAULT_MODEL
     model = _canonical_ai_model(model)
@@ -210,7 +213,7 @@ def _get_ai_settings() -> dict:
         "api_key": api_key,
         "api_key_configured": bool(api_key),
         "allowed_models": sorted(AI_ALLOWED_MODELS),
-        "env_path": str(AI_ENV_PATH),
+        "env_path": str(env_path),
     }
 
 
@@ -473,6 +476,12 @@ def get_active_paths():
             p = Path(active)
             return p, p.parent, p.parent / "backups"
     return CONFIG_PATH, OPENCLAW_DIR, BACKUP_DIR
+
+
+def _ai_env_path() -> Path:
+    """IA API key + model: same .openclaw directory as the active config (user selector)."""
+    _, openclaw_dir, _ = get_active_paths()
+    return openclaw_dir / ".env"
 
 
 # ---------------------------------------------------------------------------
@@ -1472,7 +1481,7 @@ def api_ai_settings_get():
 @app.route("/api/ai/settings", methods=["POST"])
 @login_required
 def api_ai_settings_post():
-    data = request.json or {}
+    data = request.get_json(silent=True) or {}
     model = (data.get("model") or "").strip()
     api_key = (data.get("api_key") or "").strip()
 
@@ -1485,9 +1494,16 @@ def api_ai_settings_post():
     if api_key:
         updates["ANTHROPIC_API_KEY"] = api_key
 
+    env_path = _ai_env_path()
     if updates:
         try:
-            _write_env_values(AI_ENV_PATH, updates)
+            env_path.parent.mkdir(parents=True, exist_ok=True)
+            _write_env_values(env_path, updates)
+        except PermissionError:
+            return jsonify({
+                "success": False,
+                "error": f"Sem permissão para gravar {env_path}. Rode o painel como o dono desse diretório ou ajuste permissões.",
+            }), 403
         except Exception as e:
             return jsonify({"success": False, "error": f"Não foi possível salvar settings de IA: {e}"}), 500
 
@@ -1499,6 +1515,10 @@ def api_ai_settings_post():
         "allowed_models": s["allowed_models"],
         "api_key_configured": s["api_key_configured"],
         "env_path": s["env_path"],
+        "api_key_saved": bool(api_key),
+        "warning": None
+        if api_key or s["api_key_configured"]
+        else "Nenhuma chave enviada: o campo estava vazio — cole sk-ant-... e salve de novo.",
     })
 
 
