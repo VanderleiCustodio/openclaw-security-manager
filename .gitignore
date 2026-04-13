@@ -35,20 +35,16 @@ Thumbs.db
 # Scripts locais de validação / smoke (não fazem parte do deploy do painel)
 scripts/
 
-# Agent / IDE local state (não faz parte do app em produção)
+# Agent / IDE / plugins local (não faz parte do app em produção)
 .claude/
+.cursor/
 .omc/
 .superpowers/
 
-# Documentação local sob docs/ — exceto specs de produto versionadas
-docs/*
-!docs/superpowers/
-docs/superpowers/*
-!docs/superpowers/specs/
-docs/superpowers/specs/*
-!docs/superpowers/specs/*.md
-
+# Documentação, specs de brainstorming/superpowers, skills — fora do repositório
+docs/
 screenshots/
+**/SKILL.md
 
 # Relatórios / notas locais usados só como contexto opcional para IA
 security-integration-report.md
