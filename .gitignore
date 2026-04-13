@@ -40,8 +40,14 @@ scripts/
 .omc/
 .superpowers/
 
-# Documentação de design, specs e capturas (opcional localmente; não necessário para rodar o painel)
-docs/
+# Documentação local sob docs/ — exceto specs de produto versionadas
+docs/*
+!docs/superpowers/
+docs/superpowers/*
+!docs/superpowers/specs/
+docs/superpowers/specs/*
+!docs/superpowers/specs/*.md
+
 screenshots/
 
 # Relatórios / notas locais usados só como contexto opcional para IA
