@@ -1321,12 +1321,12 @@ loadGatewayErrors();
     <span class="section-icon"><i data-lucide="wrench"></i></span>
     <h2>4. Ferramentas (Tools)</h2>
   </div>
-  <p class="hint">Perfil define um preset. Allow/Deny permitem controle granular. <strong>deny sempre vence.</strong> Se profile estiver preenchido, allow/deny são removidos automaticamente (e vice-versa).</p>
+  <p class="hint">Perfil define um preset. Allow/Deny permitem controle granular. <strong>deny sempre vence.</strong> Se <code>tools.profile</code> estiver preenchido, allow/deny são removidos ao aplicar o perfil (e vice-versa). Para usar as sugestões rápidas em <code>tools.deny</code>, deixe o perfil na primeira opção.</p>
 
   <div class="row">
     <label>tools.profile</label>
     <div>
-      <select id="tools_profile" onchange="markWarn(this, 'full')">
+      <select id="tools_profile" onfocus="toolsProfileRemember(this)" onchange="toolsProfileChange(this)">
         <option value="" {% if not state.tools_profile %}selected{% endif %}>— não configurado / usar allow+deny —</option>
         <option value="full"      {% if state.tools_profile == 'full'      %}selected{% endif %}>full — sem restrições ⚠️</option>
         <option value="coding"    {% if state.tools_profile == 'coding'    %}selected{% endif %}>coding — filesystem + shell + sessões</option>
@@ -1342,6 +1342,21 @@ loadGatewayErrors();
     <div>
       <input type="text" id="tools_allow" placeholder="ex: read, group:sessions, group:web" value="{{ state.tools_allow }}" style="width:340px">
       <div class="hint">Grupos: group:runtime, group:fs, group:sessions, group:web, group:ui, group:messaging</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Sugestões rápidas → tools.deny</label>
+    <div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px">
+        <button type="button" class="btn-ghost" style="font-size:12px" onclick="appendQuickDeny('sudo')" title="Bash(sudo *)">+ sudo</button>
+        <button type="button" class="btn-ghost" style="font-size:12px" onclick="appendQuickDeny('network')" title="Bash(curl *), Bash(wget *)">+ rede</button>
+        <button type="button" class="btn-ghost" style="font-size:12px" onclick="appendQuickDeny('env')" title="Bash(printenv), Bash(env)">+ ambiente</button>
+        <button type="button" class="btn-ghost" style="font-size:12px" onclick="appendQuickDeny('dotenv')" title="Read(.env), Read(.env.*)">+ .env</button>
+        <button type="button" class="btn-ghost" style="font-size:12px" onclick="appendQuickDeny('secrets')" title="~/.ssh, ~/.aws">+ segredos</button>
+        <button type="button" class="btn-ghost" style="font-size:12px" onclick="appendQuickDeny('pip')" title="Bash(pip install *)">+ pip</button>
+      </div>
+      <div class="hint" style="margin:0">Acrescenta entradas ao campo abaixo (sem duplicar). Coerente com o status de segurança. Com perfil ativo, limpe o perfil primeiro.</div>
     </div>
   </div>
 
@@ -2142,6 +2157,70 @@ function chk(id) { return document.getElementById(id)?.checked ?? false; }
 
 function markWarn(select, warnValue) {
   select.className = select.value === warnValue ? 'warn' : '';
+}
+
+function toolsProfileRemember(select) {
+  select.dataset.prevProfile = select.value;
+}
+
+function toolsProfileChange(select) {
+  const prev = select.dataset.prevProfile !== undefined ? select.dataset.prevProfile : select.value;
+  if (select.value === 'full' && prev !== 'full') {
+    const ok = confirm(
+      'O perfil "full" é o mais permissivo no preset de ferramentas do OpenClaw (sem restrições desse preset). ' +
+      'Indicado só em ambiente totalmente confiável. Deseja selecionar "full"?'
+    );
+    if (!ok) {
+      select.value = prev;
+      markWarn(select, 'full');
+      return;
+    }
+  }
+  select.dataset.prevProfile = select.value;
+  markWarn(select, 'full');
+}
+
+function parseToolsDenyList(s) {
+  return String(s || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+}
+
+function mergeToolsDenyIntoInput(inputId, additions) {
+  const el = document.getElementById(inputId);
+  if (!el || !additions || !additions.length) return;
+  const cur = parseToolsDenyList(el.value);
+  const seen = {};
+  cur.forEach(function (x) { seen[x] = true; });
+  additions.forEach(function (a) {
+    if (!seen[a]) { cur.push(a); seen[a] = true; }
+  });
+  el.value = cur.join(', ');
+}
+
+function toolsProfileBlocksQuickDeny() {
+  const p = val('tools_profile');
+  return Boolean(p && String(p).trim());
+}
+
+function appendQuickDeny(preset) {
+  if (toolsProfileBlocksQuickDeny()) {
+    showToast(
+      'Com tools.profile ativo, allow/deny não são aplicados junto com o perfil. Escolha a primeira opção do perfil para editar tools.deny.',
+      true
+    );
+    return;
+  }
+  var packs = {
+    sudo: ['Bash(sudo *)'],
+    network: ['Bash(curl *)', 'Bash(wget *)'],
+    env: ['Bash(printenv)', 'Bash(env)'],
+    dotenv: ['Read(.env)', 'Read(.env.*)'],
+    secrets: ['Read(~/.ssh/**)', 'Read(~/.aws/**)'],
+    pip: ['Bash(pip install *)', 'Bash(pip3 install *)'],
+  };
+  var add = packs[preset];
+  if (!add) return;
+  mergeToolsDenyIntoInput('tools_deny', add);
+  showToast('Entradas adicionadas em tools.deny — use Preview ou Aplicar.');
 }
 
 function syncModelInput() {
@@ -3395,6 +3474,12 @@ let _userMenuOpen = false;
   initChips('elevated-allowfrom-chips',
     {{ (state.elevated_allow_from.split(', ') if state.elevated_allow_from else []) | tojson }},
     'neutral');
+
+  const tprof = document.getElementById('tools_profile');
+  if (tprof) {
+    tprof.dataset.prevProfile = tprof.value;
+    markWarn(tprof, 'full');
+  }
 
   // Pre-load backup list for Config Diff selects
   loadDiffBackups();

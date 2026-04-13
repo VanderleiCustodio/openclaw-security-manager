@@ -1151,6 +1151,7 @@ def get_ui_state(cfg: dict) -> dict:
 
         "tools_allow":      ", ".join(_get(cfg, "tools", "allow", default=[]) or []),
         "tools_deny":       ", ".join(_get(cfg, "tools", "deny",  default=[]) or []),
+        "tools_profile":    str(_get(cfg, "tools", "profile", default="") or "").strip(),
 
         "elevated_enabled":    _get(cfg, "tools", "elevated", "enabled", default=""),
         "elevated_allow_from": "",  # allowFrom is a record type managed by openclaw, not editable here
